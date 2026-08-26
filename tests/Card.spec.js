@@ -1,0 +1,50 @@
+import { describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
+import Card from '../src/components/BoardField/Card.vue'
+import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
+
+const UNIT = UNITS[UNIT_TYPE.TOWER].TITANS_FEW
+
+describe('Card', () => {
+  it('renders the artwork the unit points at', () => {
+    const wrapper = mount(Card, { props: { unit: UNIT } })
+    const img = wrapper.get('img')
+    expect(img.attributes('src')).toContain('titans_few')
+    expect(img.attributes('alt')).toBe('Titans Few')
+    expect(img.attributes('draggable')).toBe('false')
+  })
+
+  it('has no remove control unless removable', () => {
+    const wrapper = mount(Card, { props: { unit: UNIT } })
+    expect(wrapper.find('[data-testid="card-remove"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="card"]').classes()).not.toContain('is-removable')
+  })
+
+  it('shows the remove control when removable', () => {
+    const wrapper = mount(Card, { props: { unit: UNIT, removable: true } })
+    expect(wrapper.get('[data-testid="card"]').classes()).toContain('is-removable')
+    expect(wrapper.get('[data-testid="card-remove"]').attributes('aria-label')).toBe(
+      'Remove Titans Few',
+    )
+  })
+
+  it('emits remove without letting the click reach the cell underneath', async () => {
+    const cellClick = []
+    const wrapper = mount(
+      {
+        components: { Card },
+        template: `<div @click="onCell"><Card :unit="unit" removable @remove="onRemove" /></div>`,
+        data: () => ({ unit: UNIT }),
+        methods: {
+          onCell: () => cellClick.push('cell'),
+          onRemove: () => cellClick.push('remove'),
+        },
+      },
+      { attachTo: document.body },
+    )
+
+    await wrapper.get('[data-testid="card-remove"]').trigger('click')
+    // Only the remove handler ran: the cell must not also open its picker.
+    expect(cellClick).toEqual(['remove'])
+  })
+})
