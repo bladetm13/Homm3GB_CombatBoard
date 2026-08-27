@@ -4,6 +4,7 @@ import Card from '../src/components/BoardField/Card.vue'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
 
 const UNIT = UNITS[UNIT_TYPE.TOWER].TITANS_FEW
+const FOIL_UNIT = UNITS[UNIT_TYPE.TOWER].TITANS_PACK
 
 describe('Card', () => {
   it('renders the artwork the unit points at', () => {
@@ -26,6 +27,21 @@ describe('Card', () => {
     expect(wrapper.get('[data-testid="card-remove"]').attributes('aria-label')).toBe(
       'Remove Titans Few',
     )
+  })
+
+  it('leaves a non-pack card without the foil overlay', () => {
+    const wrapper = mount(Card, { props: { unit: UNIT } })
+    expect(wrapper.get('[data-testid="card"]').classes()).not.toContain('is-foil')
+    expect(wrapper.find('[data-testid="card-foil"]').exists()).toBe(false)
+  })
+
+  it('gives a pack card a foil overlay masked by its own artwork', () => {
+    const wrapper = mount(Card, { props: { unit: FOIL_UNIT } })
+    expect(wrapper.get('[data-testid="card"]').classes()).toContain('is-foil')
+    const foil = wrapper.get('[data-testid="card-foil"]')
+    // Decorative: the artwork's alt text already names the unit.
+    expect(foil.attributes('aria-hidden')).toBe('true')
+    expect(foil.attributes('style')).toContain(wrapper.get('img').attributes('src'))
   })
 
   it('emits remove without letting the click reach the cell underneath', async () => {

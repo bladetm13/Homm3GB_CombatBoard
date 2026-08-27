@@ -8,7 +8,7 @@
  */
 
 export const MIN_SCALE = 0.75
-export const MAX_SCALE = 2
+export const MAX_SCALE = 3
 /** How much of the board (px, per axis) must stay inside the viewport. */
 export const KEEP_VISIBLE = 96
 

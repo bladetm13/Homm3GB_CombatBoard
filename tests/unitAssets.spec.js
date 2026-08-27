@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
-import { hasUnitImage, unitImage, unitLabel } from '../src/components/BoardField/unitAssets'
+import {
+  hasUnitImage,
+  isFoilUnit,
+  unitImage,
+  unitLabel,
+} from '../src/components/BoardField/unitAssets'
 
 const everyUnit = Object.values(UNITS).flatMap((group) => Object.values(group))
 
@@ -30,6 +35,19 @@ describe('unitAssets', () => {
   it('throws on an unknown unit rather than rendering a broken image', () => {
     expect(() => unitImage('castle/nope.webp')).toThrow(/No asset found/)
     expect(hasUnitImage('castle/nope.webp')).toBe(false)
+  })
+
+  it('treats every _pack printing, and only those, as foil', () => {
+    expect(isFoilUnit(UNITS[UNIT_TYPE.TOWER].TITANS_PACK)).toBe(true)
+    expect(isFoilUnit(UNITS[UNIT_TYPE.TOWER].TITANS_FEW)).toBe(false)
+    // Neutrals ship one card each and carry no size suffix at all.
+    expect(isFoilUnit(UNITS[UNIT_TYPE.NEUTRAL_AZURE].AZURE_DRAGONS)).toBe(false)
+    // A dash inside the unit's own name must not confuse the suffix check.
+    expect(isFoilUnit(UNITS[UNIT_TYPE.DUNGEON].MANTICORES_ALTERNATIVE_PACK)).toBe(true)
+
+    const foil = everyUnit.filter(isFoilUnit)
+    expect(foil).toHaveLength(75)
+    for (const unit of foil) expect(unit, unit).toContain('_pack')
   })
 
   it('builds a readable label from the path', () => {

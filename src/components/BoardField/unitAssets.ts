@@ -30,6 +30,16 @@ export function hasUnitImage(unit: Unit | string): boolean {
   return unit in urls
 }
 
+/**
+ * `_pack` variants are the foil printings, so the suffix is what the card's
+ * holographic treatment keys off. Neutrals ship a single, non-foil card and
+ * carry no size suffix at all.
+ */
+export function isFoilUnit(unit: Unit | string): boolean {
+  const file = unit.slice(unit.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '')
+  return file.endsWith('_pack')
+}
+
 const TIERS = new Set(['bronze', 'silver', 'golden', 'azure'])
 
 /**
