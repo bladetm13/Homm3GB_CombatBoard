@@ -11,12 +11,22 @@
  * `_`-separated everywhere except `necropolis`, and that folder is the only one
  * shipping `.png`. Keys are therefore derived from the file names, never
  * composed from the folder.
+ *
+ * Three folders are not units at all and say so in their own prefix: `walls`
+ * holds the siege obstacles (`obstacles-walls-*`), `backs` holds one card back
+ * per deck (`backs-deck-*`), and `war_machines` holds the siege machines
+ * (`war_machines-machine-*`). `unitLabel` drops the first two dash-separated segments
+ * whatever they are, so both prefixes need no special handling — but a name has
+ * to have a third segment to be left with anything, which is why the backs are
+ * `backs-deck-neutral_azure` and not `units-neutral-azure-back`.
  */
 
 export enum UNIT_TYPE {
+  BACKS = 'backs',
   CASTLE = 'castle',
   CONFLUX = 'conflux',
   COVE = 'cove',
+  CREATURE_BANKS = 'creature_banks',
   DUNGEON = 'dungeon',
   FORTRESS = 'fortress',
   INFERNO = 'inferno',
@@ -29,13 +39,17 @@ export enum UNIT_TYPE {
   STRONGHOLD = 'stronghold',
   SUMMONED = 'summoned',
   TOWER = 'tower',
+  WALLS = 'walls',
+  WAR_MACHINES = 'war_machines',
 }
 
 /** Group headings, for the unit picker. */
 export const UNIT_TYPE_LABEL: Record<UNIT_TYPE, string> = {
+  [UNIT_TYPE.BACKS]: 'Card Backs',
   [UNIT_TYPE.CASTLE]: 'Castle',
   [UNIT_TYPE.CONFLUX]: 'Conflux',
   [UNIT_TYPE.COVE]: 'Cove',
+  [UNIT_TYPE.CREATURE_BANKS]: 'Creature Banks',
   [UNIT_TYPE.DUNGEON]: 'Dungeon',
   [UNIT_TYPE.FORTRESS]: 'Fortress',
   [UNIT_TYPE.INFERNO]: 'Inferno',
@@ -48,6 +62,19 @@ export const UNIT_TYPE_LABEL: Record<UNIT_TYPE, string> = {
   [UNIT_TYPE.STRONGHOLD]: 'Stronghold',
   [UNIT_TYPE.SUMMONED]: 'Summoned',
   [UNIT_TYPE.TOWER]: 'Tower',
+  [UNIT_TYPE.WALLS]: 'Obstacles',
+  [UNIT_TYPE.WAR_MACHINES]: 'War Machines',
+}
+
+/** Card backs, one per deck. Not placeable pieces — the reverse side. */
+export enum UNITS_BACKS {
+  NEUTRAL_AZURE = 'backs/backs-deck-neutral_azure.webp',
+  NEUTRAL_BRONZE = 'backs/backs-deck-neutral_bronze.webp',
+  NEUTRAL_GOLDEN = 'backs/backs-deck-neutral_golden.webp',
+  NEUTRAL_SILVER = 'backs/backs-deck-neutral_silver.webp',
+  CREATURE_BANKS = 'backs/backs-deck-creature_banks.webp',
+  MIGHT_AND_MAGIC = 'backs/backs-deck-might_and_magic.webp',
+  TOWER_BACK = 'backs/backs-deck-tower_back.webp',
 }
 
 export enum UNITS_CASTLE {
@@ -99,6 +126,27 @@ export enum UNITS_COVE {
   NIX_PACK = 'cove/units-cove-golden-nix_pack.webp',
   HASPIDS_FEW = 'cove/units-cove-golden-haspids_few.webp',
   HASPIDS_PACK = 'cove/units-cove-golden-haspids_pack.webp',
+}
+
+export enum UNITS_CREATURE_BANKS {
+  IMP_CACHE_FAMILIARS = 'creature_banks/creature_banks-imp_cache-familiars.webp',
+  CRYPT_SKELETONS = 'creature_banks/creature_banks-crypt-skeletons.webp',
+  CRYPT_ZOMBIES = 'creature_banks/creature_banks-crypt-zombies.webp',
+  CRYPT_WRAITHS = 'creature_banks/creature_banks-crypt-wraiths.webp',
+  CRYPT_VAMPIRES = 'creature_banks/creature_banks-crypt-vampires.webp',
+  DWARVEN_TREASURY_DWARVES = 'creature_banks/creature_banks-dwarven_treasury-dwarves.webp',
+  MEDUSA_STORES_MEDUSAS = 'creature_banks/creature_banks-medusa_stores-medusas.webp',
+  DRAGON_FLY_HIVE_DRAGON_FLIES = 'creature_banks/creature_banks-dragon_fly_hive-dragon_flies.webp',
+  DERELICT_SHIP_WATER_ELEMENTALS = 'creature_banks/creature_banks-derelict_ship-water_elementals.webp',
+  PYRAMID_GOLD_GOLEMS = 'creature_banks/creature_banks-pyramid-gold_golems.webp',
+  PYRAMID_DIAMOND_GOLEMS = 'creature_banks/creature_banks-pyramid-diamond_golems.webp',
+  GRIFFIN_CONSERVATORY_GRIFFINS = 'creature_banks/creature_banks-griffin_conservatory-griffins.webp',
+  NAGA_BANK_NAGAS = 'creature_banks/creature_banks-naga_bank-nagas.webp',
+  CYCLOPS_STOCKPILE_CYCLOPES = 'creature_banks/creature_banks-cyclops_stockpile-cyclopes.webp',
+  DRAGON_UTOPIA_BLACK_DRAGONS = 'creature_banks/creature_banks-dragon_utopia-black_dragons.webp',
+  DRAGON_UTOPIA_GOLD_DRAGONS = 'creature_banks/creature_banks-dragon_utopia-gold_dragons.webp',
+  DRAGON_UTOPIA_FAERIE_DRAGONS = 'creature_banks/creature_banks-dragon_utopia-faerie_dragons.webp',
+  DRAGON_UTOPIA_CRYSTAL_DRAGONS = 'creature_banks/creature_banks-dragon_utopia-crystal_dragons.webp',
 }
 
 export enum UNITS_DUNGEON {
@@ -338,6 +386,23 @@ export enum UNITS_TOWER {
   TITANS_PACK = 'tower/units-tower-golden-titans_pack.webp',
 }
 
+/** Siege obstacles, not units — each piece next to its destroyed state. */
+export enum UNITS_WALLS {
+  WALL = 'walls/obstacles-walls-wall.webp',
+  WALL_BROKEN = 'walls/obstacles-walls-wall_broken.webp',
+  GATE = 'walls/obstacles-walls-gate.webp',
+  GATE_BROKEN = 'walls/obstacles-walls-gate_broken.webp',
+  TOWER = 'walls/obstacles-walls-tower.webp',
+}
+
+export enum UNITS_WAR_MACHINES {
+  BALLISTA = 'war_machines/war_machines-machine-ballista.webp',
+  AMMO_CART = 'war_machines/war_machines-machine-ammo_cart.webp',
+  FIRST_AID_TENT = 'war_machines/war_machines-machine-first_aid_tent.webp',
+  CATAPULT = 'war_machines/war_machines-machine-catapult.webp',
+  CANNON = 'war_machines/war_machines-machine-cannon.webp',
+}
+
 /** Every unit enum, keyed by its type. Drives the picker's order. */
 export const UNITS = {
   [UNIT_TYPE.CASTLE]: UNITS_CASTLE,
@@ -354,7 +419,11 @@ export const UNITS = {
   [UNIT_TYPE.NEUTRAL_SILVER]: UNITS_NEUTRAL_SILVER,
   [UNIT_TYPE.NEUTRAL_GOLDEN]: UNITS_NEUTRAL_GOLDEN,
   [UNIT_TYPE.NEUTRAL_AZURE]: UNITS_NEUTRAL_AZURE,
+  [UNIT_TYPE.CREATURE_BANKS]: UNITS_CREATURE_BANKS,
   [UNIT_TYPE.SUMMONED]: UNITS_SUMMONED,
+  [UNIT_TYPE.WAR_MACHINES]: UNITS_WAR_MACHINES,
+  [UNIT_TYPE.WALLS]: UNITS_WALLS,
+  [UNIT_TYPE.BACKS]: UNITS_BACKS,
 } as const
 
 /** Any unit asset path, e.g. `castle/units-castle-bronze-marksmen_few.webp`. */

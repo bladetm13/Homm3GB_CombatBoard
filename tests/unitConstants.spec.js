@@ -70,9 +70,38 @@ describe('unit constants', () => {
     expect(UNIT_TYPE_LABEL[UNIT_TYPE.NEUTRAL_AZURE]).toBe('Neutral — Azure')
   })
 
-  it('covers all 243 assets, inferno included', () => {
+  it('covers all 278 assets across every group', () => {
     const total = types.reduce((sum, type) => sum + Object.keys(UNITS[type]).length, 0)
-    expect(total).toBe(243)
+    expect(total).toBe(278)
     expect(Object.keys(UNITS[UNIT_TYPE.INFERNO])).toHaveLength(14)
+    expect(Object.keys(UNITS[UNIT_TYPE.WALLS])).toHaveLength(5)
+    expect(Object.keys(UNITS[UNIT_TYPE.CREATURE_BANKS])).toHaveLength(18)
+    expect(Object.keys(UNITS[UNIT_TYPE.BACKS])).toHaveLength(7)
+    expect(Object.keys(UNITS[UNIT_TYPE.WAR_MACHINES])).toHaveLength(5)
+  })
+
+  it('keeps the bank name in creature bank keys', () => {
+    const banks = UNITS[UNIT_TYPE.CREATURE_BANKS]
+    expect(banks.CRYPT_WRAITHS).toBe('creature_banks/creature_banks-crypt-wraiths.webp')
+    expect(banks.PYRAMID_GOLD_GOLEMS).toBe('creature_banks/creature_banks-pyramid-gold_golems.webp')
+    // A creature on its own would not be a unique key here.
+    expect(Object.keys(banks).filter((k) => k.endsWith('_WRAITHS'))).toEqual(['CRYPT_WRAITHS'])
+  })
+
+  it('shows the groups in the order the picker should list them', () => {
+    expect(Object.keys(UNITS).slice(-5)).toEqual([
+      UNIT_TYPE.CREATURE_BANKS,
+      UNIT_TYPE.SUMMONED,
+      UNIT_TYPE.WAR_MACHINES,
+      UNIT_TYPE.WALLS,
+      UNIT_TYPE.BACKS,
+    ])
+  })
+
+  it('names the obstacle cards with their own prefix, not units-', () => {
+    for (const value of Object.values(UNITS[UNIT_TYPE.WALLS])) {
+      expect(value, value).toMatch(/^walls\/obstacles-walls-/)
+    }
+    expect(UNITS[UNIT_TYPE.WALLS].WALL_BROKEN).toBe('walls/obstacles-walls-wall_broken.webp')
   })
 })
