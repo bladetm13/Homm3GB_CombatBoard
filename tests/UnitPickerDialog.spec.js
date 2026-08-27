@@ -9,7 +9,10 @@ import { UNITS, UNIT_TYPE, UNIT_TYPE_LABEL } from '../src/components/BoardField/
  * The teleport itself is covered by its own test below.
  */
 const open = () =>
-  mount(UnitPickerDialog, { attachTo: document.body, global: { stubs: { teleport: true } } })
+  mount(UnitPickerDialog, {
+    attachTo: document.body,
+    global: { stubs: { teleport: true } },
+  })
 
 const openGroup = (wrapper, index) =>
   wrapper.findAll('[data-testid="accordion-header"]')[index].trigger('click')
@@ -97,6 +100,13 @@ describe('UnitPickerDialog', () => {
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(wrapper.emitted('close')).toHaveLength(2)
+  })
+
+  it('puts the group list inside a ScrollBox, which owns the scrollbar', () => {
+    open()
+    // Scroll behaviour itself is covered by ScrollBox.spec.js.
+    expect(document.querySelectorAll('[data-testid="scrollbox"]')).toHaveLength(1)
+    expect(document.querySelector('[data-testid="scrollbox-viewport"] .accordion')).not.toBeNull()
   })
 
   it('groups toggle independently', async () => {

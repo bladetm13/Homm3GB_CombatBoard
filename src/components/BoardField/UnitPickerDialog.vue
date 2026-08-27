@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted } from 'vue'
 import Accordion from '../Accordion.vue'
+import ScrollBox from '../ScrollBox.vue'
 import Card from './Card.vue'
 import { UNITS, UNIT_TYPE_LABEL } from './constants'
 
@@ -37,7 +38,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           </button>
         </header>
 
-        <div class="picker__body">
+        <ScrollBox class="picker__body">
           <Accordion
             v-for="(group, index) in groups"
             :key="group.type"
@@ -59,7 +60,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
               </button>
             </div>
           </Accordion>
-        </div>
+        </ScrollBox>
       </div>
     </div>
   </Teleport>
@@ -107,7 +108,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 }
 
 .picker__body {
-  overflow-y: auto;
+  /* ScrollBox is the flex child that has to shrink inside the panel. */
+  flex: 1;
+  min-height: 0;
 }
 
 .picker__grid {

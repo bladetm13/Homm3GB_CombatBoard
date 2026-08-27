@@ -85,6 +85,8 @@ function removeAt(cell) {
   min-width: 0;
   min-height: 0;
   cursor: pointer;
+  background: transparent;
+  transition: background 0.2s ease;
 }
 
 .board-field .board-field__cell:hover {

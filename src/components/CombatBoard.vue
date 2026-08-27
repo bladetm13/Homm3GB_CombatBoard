@@ -210,7 +210,7 @@ onBeforeUnmount(() => {
   inset: -120px;
   background-position: center;
   background-size: cover;
-  filter: blur(28px) saturate(0.75) brightness(0.45);
+  filter: blur(10px) saturate(0.75) brightness(0.45);
 }
 
 .combat-vignette {
