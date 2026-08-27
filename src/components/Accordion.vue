@@ -1,9 +1,14 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 /**
  * A HoMM3-styled collapsible section. Each instance keeps its own state, so
  * several of them toggle independently.
+ *
+ * The body is mounted lazily: a section that has never been opened renders no
+ * slot content at all, so heavy children (images, in particular) cost nothing
+ * until the user asks for them. Once opened it stays mounted and collapsing
+ * only hides it, so re-opening is instant.
  */
 const props = defineProps({
   title: { type: String, required: true },
@@ -11,6 +16,11 @@ const props = defineProps({
 })
 
 const open = ref(props.defaultOpen)
+const wasOpened = ref(props.defaultOpen)
+
+watch(open, (isOpen) => {
+  if (isOpen) wasOpened.value = true
+})
 </script>
 
 <template>
@@ -27,7 +37,7 @@ const open = ref(props.defaultOpen)
       <span class="accordion__count"><slot name="meta" /></span>
     </button>
     <div v-show="open" class="accordion__body" data-testid="accordion-body">
-      <slot />
+      <slot v-if="wasOpened" />
     </div>
   </section>
 </template>

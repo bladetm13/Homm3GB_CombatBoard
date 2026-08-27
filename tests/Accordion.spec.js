@@ -33,6 +33,25 @@ describe('Accordion', () => {
     expect(isOpen(mountOne({ defaultOpen: false }))).toBe(false)
   })
 
+  it('does not render its body until it is first opened', async () => {
+    const wrapper = mountOne({ defaultOpen: false })
+    expect(body(wrapper).text()).toBe('')
+
+    await wrapper.get('[data-testid="accordion-header"]').trigger('click')
+    expect(body(wrapper).text()).toBe('body')
+  })
+
+  it('keeps the body mounted once opened, so collapsing only hides it', async () => {
+    const wrapper = mountOne({ defaultOpen: false })
+    const header = wrapper.get('[data-testid="accordion-header"]')
+
+    await header.trigger('click')
+    await header.trigger('click')
+
+    expect(isOpen(wrapper)).toBe(false)
+    expect(body(wrapper).text()).toBe('body')
+  })
+
   it('keeps its own state, independent of siblings', async () => {
     const wrapper = mount(
       {

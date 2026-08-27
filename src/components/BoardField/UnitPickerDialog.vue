@@ -4,16 +4,8 @@ import Accordion from '../Accordion.vue'
 import Card from './Card.vue'
 import { UNITS, UNIT_TYPE_LABEL } from './constants'
 
-/**
- * Every available unit, grouped the way `UNITS` groups them: one accordion per
- * type, in that order, each listing its enum's values in declaration order.
- *
- * Teleported to `body` on purpose — the board it is opened from lives inside a
- * scaled/translated container, and the dialog must not inherit that transform.
- */
 const emit = defineEmits(['select', 'close'])
 
-/** `Object.entries` keeps insertion order, which is the order in `UNITS`. */
 const groups = Object.entries(UNITS).map(([type, units]) => ({
   type,
   label: UNIT_TYPE_LABEL[type],
@@ -30,12 +22,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
 <template>
   <Teleport to="body">
-    <!-- A click that lands on the backdrop itself is a click outside the panel. -->
-    <div
-      class="picker__backdrop"
-      data-testid="picker-backdrop"
-      @click.self="emit('close')"
-    >
+    <div class="picker__backdrop" data-testid="picker-backdrop" @click.self="emit('close')">
       <div class="picker h3-panel" role="dialog" aria-label="Choose a unit" data-testid="picker">
         <header class="picker__head">
           <h2 class="picker__title h3-title">Choose a unit</h2>
@@ -52,9 +39,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
         <div class="picker__body">
           <Accordion
-            v-for="group in groups"
+            v-for="(group, index) in groups"
             :key="group.type"
             :title="group.label"
+            :default-open="index === 0"
             :data-testid="`picker-group-${group.type}`"
           >
             <template #meta>{{ group.units.length }}</template>
@@ -67,7 +55,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
                 :data-testid="`picker-unit-${unit}`"
                 @click="emit('select', unit)"
               >
-                <Card :unit="unit" />
+                <Card :unit="unit" lazy />
               </button>
             </div>
           </Accordion>

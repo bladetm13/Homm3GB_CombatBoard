@@ -326,4 +326,35 @@ describe('CombatBoard', () => {
     expect(readout(wrapper)).toBe('100%')
     expect(wrapper.vm.scale).toBe(1)
   })
+
+  /**
+   * `will-change: transform` pins the board's compositor layer to the raster it
+   * had when the layer was made, so leaving it on makes everything on the board
+   * blurry once zoomed. It must be held for the gesture and dropped after it.
+   */
+  it('hints will-change only while the transform is moving', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = await mountBoard()
+      expect(board(wrapper).classes()).not.toContain('is-transforming')
+
+      wrapper.vm.zoomTo(MAX_SCALE)
+      await nextTick()
+      expect(board(wrapper).classes()).toContain('is-transforming')
+
+      // A second gesture before the first settles keeps the hint alive.
+      vi.advanceTimersByTime(150)
+      wrapper.vm.zoomTo(1.5)
+      await nextTick()
+      vi.advanceTimersByTime(150)
+      await nextTick()
+      expect(board(wrapper).classes()).toContain('is-transforming')
+
+      vi.advanceTimersByTime(200)
+      await nextTick()
+      expect(board(wrapper).classes()).not.toContain('is-transforming')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

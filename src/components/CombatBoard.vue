@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import boardImage from '../../assets/battle_board.jpeg'
 import ZoomControls from './ZoomControls.vue'
 import { useBoardTransform } from '../composables/useBoardTransform.js'
@@ -27,20 +27,20 @@ const {
   setDragging,
 } = useBoardTransform({ aspectRatio: BOARD_ASPECT_RATIO })
 
-/**
- * Cards and units are placed by the parent inside the default slot: they live
- * in the board's own coordinate space, so `scale` is only needed for things
- * that must resist zooming (labels, hit targets).
- */
 defineExpose({ scale, zoomIn, zoomOut, zoomTo, reset, baseWidth, baseHeight })
 
-/**
- * A press only becomes a drag once the pointer travels this far. Below it the
- * press stays a plain click, which is what keeps the cells on the board
- * clickable: pointer capture is what swallows a click, so it is taken only
- * after the gesture has committed to being a drag.
- */
 const DRAG_THRESHOLD_PX = 4
+
+const RASTER_SETTLE_MS = 200
+
+const transforming = ref(false)
+let settleTimer = null
+
+watch(transform, () => {
+  transforming.value = true
+  clearTimeout(settleTimer)
+  settleTimer = setTimeout(() => (transforming.value = false), RASTER_SETTLE_MS)
+})
 
 let resizeObserver = null
 const drag = {
@@ -75,11 +75,7 @@ function onWheel(event) {
   zoomByWheel(event.deltaY, x, y)
 }
 
-/**
- * Overlay UI (the zoom panel, and any window added later) sits on top of the
- * board, so its pointerdown bubbles up here. Starting a drag from it would
- * capture the pointer and swallow the button's click.
- */
+
 function isOverlayUi(target) {
   return typeof target?.closest === 'function' && target.closest('[data-no-drag]') !== null
 }
@@ -138,6 +134,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   window.removeEventListener('resize', measure)
+  clearTimeout(settleTimer)
 })
 </script>
 
@@ -166,6 +163,7 @@ onBeforeUnmount(() => {
     <!-- The board itself: transform container for every future card / unit. -->
     <div
       class="combat-board"
+      :class="{ 'is-transforming': transforming }"
       data-testid="combat-board"
       :style="{
         width: `${baseWidth}px`,
@@ -234,6 +232,10 @@ onBeforeUnmount(() => {
   box-shadow:
     0 0 0 1px rgba(181, 140, 74, 0.35),
     0 12px 48px rgba(0, 0, 0, 0.75);
+}
+
+/* Only while a pan/zoom is actually in flight — see RASTER_SETTLE_MS. */
+.combat-board.is-transforming {
   will-change: transform;
 }
 </style>

@@ -89,6 +89,15 @@ describe('useBoardTransform', () => {
     expect(board.state.offsetY).toBe(0)
   })
 
+  it('snaps the rendered offset to a whole device pixel, keeping state exact', () => {
+    board.panBy(-30.4, 15.6)
+    expect(board.transform.value).toContain('translate3d(-30px, 16px, 0)')
+    // Rounding is for CSS only: the state still carries the exact offset, so
+    // repeated pans do not accumulate the error.
+    expect(board.state.offsetX).toBeCloseTo(-30.4)
+    expect(board.state.offsetY).toBeCloseTo(15.6)
+  })
+
   it('exposes a css transform string with translate before scale', () => {
     board.zoomTo(MAX_SCALE)
     board.panBy(-30, 15)

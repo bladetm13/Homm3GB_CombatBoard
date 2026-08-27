@@ -48,8 +48,13 @@ export function useBoardTransform(options = {}) {
       scaledHeight.value > state.containerHeight + 0.5,
   )
 
+  function snap(value) {
+    const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
+    return Math.round(value * dpr) / dpr
+  }
+
   const transform = computed(
-    () => `translate3d(${state.offsetX}px, ${state.offsetY}px, 0) scale(${state.scale})`,
+    () => `translate3d(${snap(state.offsetX)}px, ${snap(state.offsetY)}px, 0) scale(${state.scale})`,
   )
 
   function applyClamp() {

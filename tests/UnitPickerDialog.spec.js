@@ -11,6 +11,9 @@ import { UNITS, UNIT_TYPE, UNIT_TYPE_LABEL } from '../src/components/BoardField/
 const open = () =>
   mount(UnitPickerDialog, { attachTo: document.body, global: { stubs: { teleport: true } } })
 
+const openGroup = (wrapper, index) =>
+  wrapper.findAll('[data-testid="accordion-header"]')[index].trigger('click')
+
 afterEach(() => {
   document.body.innerHTML = ''
 })
@@ -33,17 +36,28 @@ describe('UnitPickerDialog', () => {
     expected.forEach((label, i) => expect(titles[i]).toContain(label))
   })
 
-  it('opens every group by default', () => {
+  it('opens only the first group by default', () => {
     const wrapper = open()
     const bodies = wrapper.findAll('[data-testid="accordion-body"]')
     expect(bodies).toHaveLength(Object.keys(UNITS).length)
-    for (const body of bodies) expect(body.element.style.display).not.toBe('none')
+    expect(bodies[0].element.style.display).not.toBe('none')
+    for (const body of bodies.slice(1)) expect(body.element.style.display).toBe('none')
   })
 
-  it('renders every unit as a card, in enum order within a group', () => {
+  it('renders cards only for the groups that have been opened', async () => {
     const wrapper = open()
-    expect(wrapper.findAll('[data-testid="card"]')).toHaveLength(243)
+    const castle = Object.values(UNITS[UNIT_TYPE.CASTLE])
 
+    // Only the first group is mounted, so the other ~230 images are never fetched.
+    expect(wrapper.findAll('[data-testid="card"]')).toHaveLength(castle.length)
+
+    await openGroup(wrapper, 1)
+    const second = Object.values(UNITS[Object.keys(UNITS)[1]])
+    expect(wrapper.findAll('[data-testid="card"]')).toHaveLength(castle.length + second.length)
+  })
+
+  it('renders every unit of an open group as a card, in enum order', () => {
+    const wrapper = open()
     const castle = Object.values(UNITS[UNIT_TYPE.CASTLE])
     const rendered = wrapper
       .findAll(`[data-testid^="picker-unit-castle/"]`)
@@ -51,9 +65,15 @@ describe('UnitPickerDialog', () => {
     expect(rendered).toEqual(castle)
   })
 
+  it('defers image loading for the cards it does render', () => {
+    const img = open().get('[data-testid="card"] img')
+    expect(img.attributes('loading')).toBe('lazy')
+  })
+
   it('emits the unit that was clicked', async () => {
     const wrapper = open()
     const unit = UNITS[UNIT_TYPE.TOWER].TITANS_FEW
+    await openGroup(wrapper, Object.keys(UNITS).indexOf(UNIT_TYPE.TOWER))
     await wrapper.get(`[data-testid="picker-unit-${unit}"]`).trigger('click')
     expect(wrapper.emitted('select')).toEqual([[unit]])
   })
@@ -79,12 +99,15 @@ describe('UnitPickerDialog', () => {
     expect(wrapper.emitted('close')).toHaveLength(2)
   })
 
-  it('groups can be collapsed independently', async () => {
+  it('groups toggle independently', async () => {
     const wrapper = open()
-    const headers = wrapper.findAll('[data-testid="accordion-header"]')
     const bodies = wrapper.findAll('[data-testid="accordion-body"]')
 
-    await headers[0].trigger('click')
+    await openGroup(wrapper, 1)
+    expect(bodies[0].element.style.display).not.toBe('none')
+    expect(bodies[1].element.style.display).not.toBe('none')
+
+    await openGroup(wrapper, 0)
     expect(bodies[0].element.style.display).toBe('none')
     expect(bodies[1].element.style.display).not.toBe('none')
   })

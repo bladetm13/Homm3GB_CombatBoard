@@ -13,10 +13,13 @@ describe('unitAssets', () => {
     }
   })
 
-  it('resolves both extensions', () => {
+  it('keeps each unit its own filename and extension', () => {
     expect(unitImage(UNITS[UNIT_TYPE.CASTLE].MARKSMEN_FEW)).toContain('marksmen_few')
-    // necropolis ships .png, everything else .webp.
-    expect(unitImage(UNITS[UNIT_TYPE.NECROPOLIS].SKELETONS_FEW)).toContain('skeletons-few')
+    expect(unitImage(UNITS[UNIT_TYPE.NECROPOLIS].SKELETONS_FEW)).toContain('skeletons_few')
+    // The glob covers .webp and .png alike; today every asset happens to be .webp.
+    for (const unit of everyUnit) {
+      expect(unitImage(unit), unit).toContain(unit.slice(unit.lastIndexOf('.')))
+    }
   })
 
   it('gives each unit a distinct url', () => {

@@ -43,9 +43,8 @@ describe('unit constants', () => {
       'castle/units-castle-bronze-marksmen_few.webp',
     )
     expect(UNITS[UNIT_TYPE.NEUTRAL_AZURE].TITANS).toBe('neutral_azure/units-neutral-azure-titans.webp')
-    // necropolis is the only .png folder, and the only one using `-few`.
     expect(UNITS[UNIT_TYPE.NECROPOLIS].SKELETONS_FEW).toBe(
-      'necropolis/units-necropolis-bronze-skeletons-few.png',
+      'necropolis/units-necropolis-bronze-skeletons_few.webp',
     )
     // ...and these two names carry a dash of their own.
     expect(UNITS[UNIT_TYPE.FORTRESS].DRAGON_FLIES_FEW).toBe(

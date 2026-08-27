@@ -8,11 +8,14 @@ import { unitImage, unitLabel } from './unitAssets'
  *
  * The card fills its container, so the same component works both as a picker
  * entry and as a piece on the board. `removable` adds the hover-only cross that
- * takes it off the field.
+ * takes it off the field. `lazy` defers the artwork until the card scrolls into
+ * view — worth it for the picker's long lists, pointless for the few pieces on
+ * the board.
  */
 const props = defineProps({
   unit: { type: String, required: true },
   removable: { type: Boolean, default: false },
+  lazy: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['remove'])
@@ -23,7 +26,15 @@ const label = computed(() => unitLabel(props.unit))
 
 <template>
   <div class="card" :class="{ 'is-removable': removable }" data-testid="card" :data-unit="unit">
-    <img class="card__art" :src="src" :alt="label" :title="label" draggable="false" />
+    <img
+      class="card__art"
+      :src="src"
+      :alt="label"
+      :title="label"
+      :loading="lazy ? 'lazy' : 'eager'"
+      decoding="async"
+      draggable="false"
+    />
     <button
       v-if="removable"
       class="card__remove"
