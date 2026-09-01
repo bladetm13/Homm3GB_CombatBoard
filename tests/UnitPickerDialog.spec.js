@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import UnitPickerDialog from '../src/components/BoardField/UnitPickerDialog.vue'
 import { UNITS, UNIT_TYPE, UNIT_TYPE_LABEL } from '../src/components/BoardField/constants'
+import { clearPickerMemory } from '../src/components/BoardField/pickerMemory'
 
 /**
  * The dialog teleports to `body` so the board's transform cannot reach it, and
@@ -20,6 +21,9 @@ const openGroup = (wrapper, index) =>
 afterEach(() => {
   document.body.innerHTML = ''
 })
+
+// Every picker remembers where it was left; each test starts from a clean one.
+beforeEach(clearPickerMemory)
 
 describe('UnitPickerDialog', () => {
   it('teleports out of the board, into body', () => {
@@ -120,5 +124,68 @@ describe('UnitPickerDialog', () => {
     await openGroup(wrapper, 0)
     expect(bodies[0].element.style.display).toBe('none')
     expect(bodies[1].element.style.display).not.toBe('none')
+  })
+
+  it('marks every cell with the plus that says what the click does', () => {
+    const wrapper = open()
+    const castle = Object.values(UNITS[UNIT_TYPE.CASTLE])
+    const hints = wrapper.findAll('.picker__add')
+
+    expect(hints).toHaveLength(castle.length)
+    // Inert, like the board's: the cell button around it takes the click.
+    for (const hint of hints) expect(hint.attributes('aria-hidden')).toBe('true')
+  })
+
+  it('reads a card instead of picking it when the eye is clicked', async () => {
+    const wrapper = open()
+    const unit = UNITS[UNIT_TYPE.CASTLE].HALBERDIERS_FEW
+    const cell = wrapper.get(`[data-testid="picker-unit-${unit}"]`)
+
+    await cell.get('[data-testid="card-preview-open"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="card-preview"]').exists()).toBe(true)
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('closes the preview on Escape, and leaves the picker open under it', async () => {
+    const wrapper = open()
+    const unit = UNITS[UNIT_TYPE.CASTLE].HALBERDIERS_FEW
+    await wrapper
+      .get(`[data-testid="picker-unit-${unit}"] [data-testid="card-preview-open"]`)
+      .trigger('click')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="card-preview"]').exists()).toBe(false)
+    expect(wrapper.emitted('close')).toBeUndefined()
+
+    // ...and the next Escape reaches the picker again.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('opens again with the groups the user left open', async () => {
+    const first = open()
+    await openGroup(first, 3)
+    await openGroup(first, 0) // ...and Castle closed behind them.
+    first.unmount()
+
+    const second = open()
+    const bodies = second.findAll('[data-testid="accordion-body"]')
+    expect(bodies[0].element.style.display).toBe('none')
+    expect(bodies[3].element.style.display).not.toBe('none')
+    expect(bodies[1].element.style.display).toBe('none')
+  })
+
+  it('still mounts only what is open, however much is remembered', async () => {
+    const first = open()
+    await openGroup(first, 1)
+    first.unmount()
+
+    const second = open()
+    const first_ = Object.values(UNITS[UNIT_TYPE.CASTLE])
+    const second_ = Object.values(UNITS[Object.keys(UNITS)[1]])
+    expect(second.findAll('[data-testid="card"]')).toHaveLength(first_.length + second_.length)
   })
 })

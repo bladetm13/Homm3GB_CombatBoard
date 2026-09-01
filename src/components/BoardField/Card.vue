@@ -1,5 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import CardFoil from './CardFoil.vue'
+import CardPreviewDialog from './CardPreviewDialog.vue'
 import { isFoilUnit, unitImage, unitLabel } from './unitAssets'
 
 /**
@@ -14,6 +16,9 @@ import { isFoilUnit, unitImage, unitLabel } from './unitAssets'
  *
  * `_pack` units get the holographic treatment on top of the artwork — see
  * `isFoilUnit`.
+ *
+ * The eye is on every card, wherever it is shown: at card size the printed
+ * rules text is unreadable, so the card carries its own way of being read.
  */
 const props = defineProps({
   unit: { type: String, required: true },
@@ -26,8 +31,8 @@ const emit = defineEmits(['remove'])
 const src = computed(() => unitImage(props.unit))
 const label = computed(() => unitLabel(props.unit))
 const foil = computed(() => isFoilUnit(props.unit))
-// The sheen is masked by the artwork itself, so the CSS needs the same url.
-const foilStyle = computed(() => ({ '--card-art': `url("${src.value}")` }))
+
+const previewing = ref(false)
 </script>
 
 <template>
@@ -46,13 +51,20 @@ const foilStyle = computed(() => ({ '--card-art': `url("${src.value}")` }))
       decoding="async"
       draggable="false"
     />
-    <span
-      v-if="foil"
-      class="card__foil"
-      :style="foilStyle"
-      data-testid="card-foil"
-      aria-hidden="true"
-    />
+    <CardFoil v-if="foil" class="card__foil" :unit="unit" />
+    <button
+      class="card__preview"
+      type="button"
+      :aria-label="`Preview ${label}`"
+      data-testid="card-preview-open"
+      @click.stop="previewing = true"
+    >
+      <svg class="card__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="card__icon-disc" cx="12" cy="12" r="11.2" />
+        <path d="M4.6 12S7.5 7.7 12 7.7 19.4 12 19.4 12 16.5 16.3 12 16.3 4.6 12 4.6 12Z" />
+        <circle cx="12" cy="12" r="2.2" />
+      </svg>
+    </button>
     <button
       v-if="removable"
       class="card__remove"
@@ -61,14 +73,26 @@ const foilStyle = computed(() => ({ '--card-art': `url("${src.value}")` }))
       data-testid="card-remove"
       @click.stop="emit('remove')"
     >
-      &times;
+      <svg class="card__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="card__icon-disc" cx="12" cy="12" r="11.2" />
+        <path d="m8.4 8.4 7.2 7.2m0-7.2-7.2 7.2" />
+      </svg>
     </button>
+
+    <CardPreviewDialog v-if="previewing" :unit="unit" @close="previewing = false" />
   </div>
 </template>
 
 <style scoped>
 .card {
   position: relative;
+  /*
+    The corner controls are sized and inset in `cqw`, so the card has to be the
+    container they measure. Without this they find whatever container happens to
+    be above them — the board's cell on the field, the viewport in the picker,
+    which is a hundred times wider.
+  */
+  container-type: inline-size;
   width: 100%;
   height: 100%;
 }
@@ -85,56 +109,10 @@ const foilStyle = computed(() => ({ '--card-art': `url("${src.value}")` }))
   isolation: isolate;
 }
 
-.card__foil {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  -webkit-mask-image: var(--card-art);
-  mask-image: var(--card-art);
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  background-image:
-    linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.6) 48%, transparent 57%),
-    linear-gradient(
-      105deg,
-      #ff2fd0 6%,
-      #37e8ff 24%,
-      #7dff8a 40%,
-      #ffe14d 56%,
-      #ff7a3c 72%,
-      #a45cff 92%
-    );
-  background-size:
-    240% 100%,
-    200% 100%;
-  background-position:
-    30% 0,
-    35% 0;
-  mix-blend-mode: color-dodge;
-  opacity: var(--card-foil-rest, 0);
-  transition: opacity 0.18s ease;
-}
-
+/* The sheen itself is `CardFoil`; the card only says when it comes out. */
 .card.is-foil:hover .card__foil {
   opacity: var(--card-foil-hover, 0.2);
   animation: card-foil-sweep 1.5s ease-in-out infinite alternate;
-}
-
-@keyframes card-foil-sweep {
-  from {
-    background-position:
-      95% 0,
-      100% 0;
-  }
-  to {
-    background-position:
-      -35% 0,
-      -30% 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -143,39 +121,74 @@ const foilStyle = computed(() => ({ '--card-art': `url("${src.value}")` }))
   }
 }
 
+/*
+  The same disc-and-line hint the board and the picker draw, only smaller and
+  tucked inside the card's own corners rather than hung off them: they read as
+  controls on the artwork, not as badges stuck to the card.
+*/
+.card__preview,
 .card__remove {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: 5cqw;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 12%;
   padding: 0;
-  font-family: var(--h3-font-display);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--h3-gold-bright);
+  color: var(--h3-hint-ink);
   cursor: pointer;
-  background-image: linear-gradient(180deg, #8c2f22, #4a1610);
-  border: 1px solid var(--h3-bevel-dark);
-  border-radius: 50%;
-  box-shadow:
-    inset 1px 1px 0 rgba(255, 190, 160, 0.45),
-    0 2px 6px rgba(0, 0, 0, 0.7);
+  background: none;
+  border: 0;
   /* Hidden until the card is hovered, so the board stays clean. */
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease;
 }
 
+.card__preview {
+  left: 5cqw;
+}
+
+.card__remove {
+  right: 5cqw;
+}
+
+.card:hover .card__preview,
+.card__preview:focus-visible,
 .card.is-removable:hover .card__remove,
 .card__remove:focus-visible {
   opacity: 1;
 }
 
-.card__remove:hover {
-  filter: brightness(1.25);
+.card__preview:hover {
+  color: var(--h3-gold-bright);
 }
+
+/* Warm, not gold: the one control here that takes something away. */
+.card__remove:hover {
+  color: #ffbea0;
+}
+
+.card__icon {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+}
+
+.card__icon-disc {
+  fill: var(--h3-hint-ground);
+  stroke: var(--h3-hint-edge);
+  stroke-width: 1;
+}
+
+.card__preview:hover .card__icon-disc,
+.card__remove:hover .card__icon-disc {
+  stroke: currentColor;
+}
+
 </style>

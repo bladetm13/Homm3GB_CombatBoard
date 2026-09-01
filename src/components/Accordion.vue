@@ -5,6 +5,9 @@ import { ref, watch } from 'vue'
  * A HoMM3-styled collapsible section. Each instance keeps its own state, so
  * several of them toggle independently.
  *
+ * `toggle` fires on every open and close, for anyone who wants to remember the
+ * section's state — the component itself only keeps it while it is mounted.
+ *
  * The body is mounted lazily: a section that has never been opened renders no
  * slot content at all, so heavy children (images, in particular) cost nothing
  * until the user asks for them. Once opened it stays mounted and collapsing
@@ -15,11 +18,14 @@ const props = defineProps({
   defaultOpen: { type: Boolean, default: true },
 })
 
+const emit = defineEmits(['toggle'])
+
 const open = ref(props.defaultOpen)
 const wasOpened = ref(props.defaultOpen)
 
 watch(open, (isOpen) => {
   if (isOpen) wasOpened.value = true
+  emit('toggle', isOpen)
 })
 </script>
 

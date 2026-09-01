@@ -71,4 +71,13 @@ describe('Accordion', () => {
     expect(bodies[0].element.style.display).toBe('none')
     expect(bodies[1].element.style.display).not.toBe('none')
   })
+
+  it('announces every open and close, for whoever wants to remember it', async () => {
+    const wrapper = mount(Accordion, { props: { title: 'Castle', defaultOpen: false } })
+
+    await wrapper.get('[data-testid="accordion-header"]').trigger('click')
+    await wrapper.get('[data-testid="accordion-header"]').trigger('click')
+
+    expect(wrapper.emitted('toggle')).toEqual([[true], [false]])
+  })
 })

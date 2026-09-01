@@ -125,7 +125,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => observer?.disconnect())
 
-defineExpose({ measure, scrollToOffset })
+defineExpose({ measure, scrollToOffset, scrollTop })
 </script>
 
 <template>

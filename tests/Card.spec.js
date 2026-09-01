@@ -1,10 +1,22 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import Card from '../src/components/BoardField/Card.vue'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
 
 const UNIT = UNITS[UNIT_TYPE.TOWER].TITANS_FEW
 const FOIL_UNIT = UNITS[UNIT_TYPE.TOWER].TITANS_PACK
+
+/** The preview teleports to body, so it is stubbed out of the way by default. */
+const mountCard = (props) =>
+  mount(Card, {
+    attachTo: document.body,
+    props: { unit: UNIT, ...props },
+    global: { stubs: { teleport: true } },
+  })
+
+afterEach(() => {
+  document.body.innerHTML = ''
+})
 
 describe('Card', () => {
   it('renders the artwork the unit points at', () => {
@@ -62,5 +74,42 @@ describe('Card', () => {
     await wrapper.get('[data-testid="card-remove"]').trigger('click')
     // Only the remove handler ran: the cell must not also open its picker.
     expect(cellClick).toEqual(['remove'])
+  })
+
+  it('carries the eye whether or not it is removable', () => {
+    expect(mountCard().get('[data-testid="card-preview-open"]').attributes('aria-label')).toBe(
+      'Preview Titans Few',
+    )
+    expect(mountCard({ removable: true }).find('[data-testid="card-preview-open"]').exists()).toBe(
+      true,
+    )
+  })
+
+  it('opens the card at full size from the eye, and closes it again', async () => {
+    const wrapper = mountCard()
+    expect(wrapper.find('[data-testid="card-preview"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="card-preview-open"]').trigger('click')
+    const preview = wrapper.get('[data-testid="card-preview"]')
+    expect(preview.get('img').attributes('src')).toContain('titans_few')
+
+    await wrapper.get('[data-testid="card-preview-close"]').trigger('click')
+    expect(wrapper.find('[data-testid="card-preview"]').exists()).toBe(false)
+  })
+
+  it('opens the preview without letting the click reach the cell underneath', async () => {
+    const clicks = []
+    const wrapper = mount(
+      {
+        components: { Card },
+        template: `<div @click="clicks.push('cell')"><Card :unit="unit" /></div>`,
+        data: () => ({ unit: UNIT, clicks }),
+      },
+      { attachTo: document.body, global: { stubs: { teleport: true } } },
+    )
+
+    await wrapper.get('[data-testid="card-preview-open"]').trigger('click')
+    expect(clicks).toEqual([])
+    expect(wrapper.find('[data-testid="card-preview"]').exists()).toBe(true)
   })
 })

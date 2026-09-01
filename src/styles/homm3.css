@@ -21,6 +21,13 @@
   --h3-red: #a8402c;
   --h3-blue: #2f4b7a;
 
+  /* Hover affordances — the "click me" ink the board and the picker share. */
+  --h3-hint-ink: #f9db9c;
+  --h3-hint-tint: rgba(242, 217, 152, 0.25);
+  /* An icon dropped on artwork needs its own ground to stay legible. */
+  --h3-hint-ground: rgba(12, 8, 3, 0.62);
+  --h3-hint-edge: rgba(249, 219, 156, 0.45);
+
   --h3-font-display: 'Cinzel', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
   --h3-font-body: 'IM Fell English', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
 
@@ -162,4 +169,21 @@ canvas {
   cursor: default;
   filter: grayscale(0.75) brightness(0.6);
   color: var(--h3-gold-dim);
+}
+
+/* --------------------------------------------------------------------------
+   Foil sweep — the light travelling across a holographic card. Shared by
+   `CardFoil`'s two callers, which is why it cannot live in either's scope.
+   -------------------------------------------------------------------------- */
+@keyframes card-foil-sweep {
+  from {
+    background-position:
+      95% 0,
+      100% 0;
+  }
+  to {
+    background-position:
+      -35% 0,
+      -30% 0;
+  }
 }

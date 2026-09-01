@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BoardField from '../src/components/BoardField/BoardField.vue'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
+import { clearPickerMemory } from '../src/components/BoardField/pickerMemory'
+import {
+  TOKENS,
+  TOKEN_CATEGORY,
+  TOKEN_SCOPE,
+} from '../src/components/BoardField/tokenConstants'
 
 const TITANS = UNITS[UNIT_TYPE.TOWER].TITANS_FEW
 const ARCHANGELS = UNITS[UNIT_TYPE.CASTLE].ARCHANGELS_PACK
@@ -18,11 +24,10 @@ const picker = (wrapper) => wrapper.find('[data-testid="picker"]')
 const cardIn = (cell) => cell.find('[data-testid="card"]')
 
 /**
- * Clicks a cell, then picks a unit out of the dialog it opens. The picker only
- * mounts the groups that are open, so the unit's own group is expanded first.
+ * Picks a unit out of an already open dialog. The picker only mounts the groups
+ * that are open, so the unit's own group is expanded first.
  */
-async function placeUnit(wrapper, cellIndex, unit) {
-  await cells(wrapper)[cellIndex].trigger('click')
+async function pickUnit(wrapper, unit) {
   if (!wrapper.find(`[data-testid="picker-unit-${unit}"]`).exists()) {
     const group = Object.keys(UNITS).indexOf(unit.slice(0, unit.indexOf('/')))
     await wrapper.findAll('[data-testid="accordion-header"]')[group].trigger('click')
@@ -30,7 +35,22 @@ async function placeUnit(wrapper, cellIndex, unit) {
   await wrapper.get(`[data-testid="picker-unit-${unit}"]`).trigger('click')
 }
 
+/** Clicks a cell, then picks a unit out of the dialog it opens. */
+async function placeUnit(wrapper, cellIndex, unit) {
+  await cells(wrapper)[cellIndex].trigger('click')
+  await pickUnit(wrapper, unit)
+}
+
 const cells = (wrapper) => wrapper.findAll('[data-testid="board-field-cell"]')
+
+const tokenPicker = (wrapper) => wrapper.find('[data-testid="token-picker"]')
+
+/** Opens the token picker over a cell through that cell's own plate. */
+const openTokens = (wrapper, cellIndex) =>
+  cells(wrapper)[cellIndex].get('[data-testid="board-field-add-token"]').trigger('click')
+
+// Every picker remembers where it was left; each test starts from a clean one.
+beforeEach(clearPickerMemory)
 
 describe('BoardField', () => {
   it('lays out a 4x5 grid, matching the grid printed on the artwork', () => {
@@ -163,6 +183,18 @@ describe('BoardField', () => {
     expect(wrapper.emitted('remove')[0][0]).toMatchObject({ row: 1, col: 3, unit: TITANS })
   })
 
+  it('reads a card on the board without opening the picker over it', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 2, TITANS)
+    await cells(wrapper)[2].get('[data-testid="card-preview-open"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="card-preview"] img').attributes('src')).toContain(
+      'titans_few',
+    )
+    expect(picker(wrapper).exists()).toBe(false)
+    expect(wrapper.emitted('cell-click')).toHaveLength(1)
+  })
+
   it('does not reopen the picker when the cross is clicked', async () => {
     const wrapper = mountField()
     await placeUnit(wrapper, 2, TITANS)
@@ -188,5 +220,131 @@ describe('BoardField', () => {
     })
     expect(wrapper.findAll('em').map((n) => n.text())[0]).toBe(TITANS)
     expect(wrapper.findAll('em').map((n) => n.text())[1]).toBe('-')
+  })
+  it('hints at every cell, and offers a token plate on every cell', () => {
+    const wrapper = mountField()
+    expect(wrapper.findAll('[data-testid="board-field-hint"]')).toHaveLength(20)
+    expect(wrapper.findAll('[data-testid="board-field-add-token"]')).toHaveLength(20)
+  })
+
+  it('keeps the hint out of the pointer\'s way — the cell itself takes the click', () => {
+    const hint = mountField().get('[data-testid="board-field-hint"]')
+    expect(hint.element.tagName).toBe('SPAN')
+    expect(hint.attributes('aria-hidden')).toBe('true')
+  })
+
+  it('offers a plus on bare ground and swap arrows over a card', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 6, TITANS)
+    const hintIn = (i) => cells(wrapper)[i].get('[data-testid="board-field-hint"]')
+
+    expect(hintIn(6).attributes('data-hint')).toBe('swap')
+    expect(hintIn(6).find('.board-field__swap').exists()).toBe(true)
+    expect(hintIn(6).find('.board-field__plus').exists()).toBe(false)
+
+    expect(hintIn(5).attributes('data-hint')).toBe('add')
+    expect(hintIn(5).find('.board-field__plus').exists()).toBe(true)
+
+    const hints = wrapper.findAll('[data-testid="board-field-hint"]')
+    expect(hints.filter((h) => h.attributes('data-hint') === 'swap')).toHaveLength(1)
+  })
+
+  it('goes back to the plus once the card is taken off', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 6, TITANS)
+    await cells(wrapper)[6].get('[data-testid="card-remove"]').trigger('click')
+
+    const hint = cells(wrapper)[6].get('[data-testid="board-field-hint"]')
+    expect(hint.attributes('data-hint')).toBe('add')
+  })
+
+  it('keeps the token plate on a cell that already holds a unit', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 6, TITANS)
+    expect(cells(wrapper)[6].find('[data-testid="board-field-add-token"]').exists()).toBe(true)
+  })
+
+  it('names the token plate in words, not just an icon', () => {
+    expect(mountField().get('[data-testid="board-field-add-token"]').text()).toBe('Add token')
+  })
+
+  it('opens the token picker from the circle, not the unit picker', async () => {
+    const wrapper = mountField()
+    await openTokens(wrapper, 6)
+
+    expect(tokenPicker(wrapper).exists()).toBe(true)
+    expect(picker(wrapper).exists()).toBe(false)
+    expect(wrapper.emitted('cell-click')).toHaveLength(1)
+    expect(wrapper.emitted('cell-click')[0][0]).toMatchObject({ index: 6, row: 2, col: 3 })
+  })
+
+  it('closes the token picker again', async () => {
+    const wrapper = mountField()
+    await openTokens(wrapper, 0)
+    await wrapper.get('[data-testid="token-picker-backdrop"]').trigger('click')
+
+    expect(tokenPicker(wrapper).exists()).toBe(false)
+  })
+
+  it('offers board effects over an empty cell', async () => {
+    const wrapper = mountField()
+    await openTokens(wrapper, 0)
+
+    const firewall = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL
+    expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
+      'Choose a field token',
+    )
+    expect(wrapper.find(`[data-testid="token-picker-token-${firewall}"]`).exists()).toBe(true)
+  })
+
+  it('offers stack markers over a cell that holds a unit', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await openTokens(wrapper, 0)
+
+    const damage = TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON].DAMAGE_1
+    expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
+      'Choose a unit token',
+    )
+    expect(wrapper.find(`[data-testid="token-picker-token-${damage}"]`).exists()).toBe(true)
+  })
+
+  it('follows the cell, not the last one opened, when the scope changes', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+
+    await openTokens(wrapper, 0)
+    await wrapper.get('[data-testid="token-picker-close"]').trigger('click')
+    await openTokens(wrapper, 1)
+
+    expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
+      'Choose a field token',
+    )
+  })
+
+  it('hands the picked token to the cell it was opened over, and closes', async () => {
+    const wrapper = mountField()
+    const firewall = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL
+    await openTokens(wrapper, 6)
+    await wrapper.get(`[data-testid="token-picker-token-${firewall}"]`).trigger('click')
+
+    expect(wrapper.emitted('place-token')[0][0]).toMatchObject({
+      index: 6,
+      row: 2,
+      col: 3,
+      token: firewall,
+    })
+    expect(tokenPicker(wrapper).exists()).toBe(false)
+  })
+
+  it('leaves the units alone when a token is picked', async () => {
+    const wrapper = mountField()
+    const firewall = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL
+    await openTokens(wrapper, 0)
+    await wrapper.get(`[data-testid="token-picker-token-${firewall}"]`).trigger('click')
+
+    expect(wrapper.findAll('[data-testid="card"]')).toHaveLength(0)
+    expect(wrapper.emitted('place')).toBeUndefined()
+    expect(wrapper.emitted('update:units')).toBeUndefined()
   })
 })
