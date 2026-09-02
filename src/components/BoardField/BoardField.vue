@@ -3,15 +3,26 @@ import { computed, ref } from 'vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
+import { tokenImage, tokenLabel } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
 
-const emit = defineEmits(['cell-click', 'place', 'place-token', 'remove'])
+/** How many tokens one cell holds — two rows of two, and no more. */
+const MAX_TOKENS = 4
+
+const emit = defineEmits(['cell-click', 'place', 'place-token', 'remove', 'remove-token'])
 const units = defineModel('units', { type: Object, default: () => ({}) })
+const tokens = defineModel('tokens', { type: Object, default: () => ({}) })
 const activeCell = ref(null)
-const activeTokenCell = ref(null)
+
+/**
+ * The cell the token picker is open over, and which of its tokens the pick will
+ * land on: an index replaces that token, `null` adds one.
+ */
+const activeToken = ref(null)
 
 const cellKey = (cell) => `${cell.row}-${cell.col}`
 const unitAt = (cell) => units.value[cellKey(cell)]
+const tokensAt = (cell) => tokens.value[cellKey(cell)] ?? []
 
 const cells = computed(() =>
   Array.from({ length: 20 }, (_, index) => ({
@@ -27,21 +38,22 @@ function openPicker(cell) {
 }
 
 /**
- * The token plate stops the click from reaching the cell, so it has to
+ * Everything token-side stops the click from reaching the cell, so it has to
  * announce the cell itself — from the outside, a click anywhere in a cell still
  * emits `cell-click`.
  */
-function openTokenPicker(cell) {
-  activeTokenCell.value = cell
+function openTokenPicker(cell, index = null) {
+  activeToken.value = { cell, index }
   emit('cell-click', cell)
 }
 
 /**
  * A token is offered by where it can go: a stack marker on a unit, a board
- * effect on bare ground. The cell under the plate decides which set opens.
+ * effect on bare ground. The cell under the picker decides which set opens —
+ * and a token already down is replaced from the same set it came from.
  */
 const tokenScope = computed(() =>
-  activeTokenCell.value && unitAt(activeTokenCell.value) ? TOKEN_SCOPE.UNIT : TOKEN_SCOPE.FIELD,
+  activeToken.value && unitAt(activeToken.value.cell) ? TOKEN_SCOPE.UNIT : TOKEN_SCOPE.FIELD,
 )
 
 function place(unit) {
@@ -53,18 +65,42 @@ function place(unit) {
 }
 
 function placeToken(token) {
-  const cell = activeTokenCell.value
-  if (!cell) return
-  activeTokenCell.value = null
-  emit('place-token', { ...cell, token })
+  const active = activeToken.value
+  if (!active) return
+  const { cell, index } = active
+  const list = tokensAt(cell)
+  const at = index ?? list.length
+  if (at >= MAX_TOKENS) return
+
+  const next = [...list]
+  next[at] = token
+  tokens.value = { ...tokens.value, [cellKey(cell)]: next }
+  activeToken.value = null
+  // `index` is the cell's own; a token's place in it is its `slot`.
+  emit('place-token', { ...cell, token, slot: at })
+}
+
+function removeToken(cell, index) {
+  const key = cellKey(cell)
+  const token = tokensAt(cell)[index]
+  const next = tokensAt(cell).filter((_, i) => i !== index)
+  tokens.value = next.length ? { ...tokens.value, [key]: next } : withoutKey(tokens.value, key)
+  emit('remove-token', { ...cell, token, slot: index })
 }
 
 function removeAt(cell) {
   const key = cellKey(cell)
   const unit = units.value[key]
-  const { [key]: _removed, ...rest } = units.value
-  units.value = rest
+  units.value = withoutKey(units.value, key)
+  // The markers belonged to the stack that stood here, and the cell is bare
+  // ground now — which is not a place unit tokens may be.
+  if (tokensAt(cell).length) tokens.value = withoutKey(tokens.value, key)
   emit('remove', { ...cell, unit })
+}
+
+function withoutKey(source, key) {
+  const { [key]: _dropped, ...rest } = source
+  return rest
 }
 </script>
 
@@ -89,6 +125,53 @@ function removeAt(cell) {
         @remove="removeAt(cell)"
       />
       <!--
+        The tokens laid on this cell — on the card if there is one, on the bare
+        ground if not. They wrap after two, so three read as a row of two and a
+        single below it.
+      -->
+      <div
+        v-if="tokensAt(cell).length"
+        class="board-field__tokens"
+        :class="unitAt(cell) ? 'board-field__tokens--on-unit' : 'board-field__tokens--on-field'"
+        data-testid="board-field-tokens"
+      >
+        <span
+          v-for="(token, index) in tokensAt(cell)"
+          :key="index"
+          class="board-field__token"
+        >
+          <button
+            class="board-field__token-art"
+            type="button"
+            :aria-label="`Replace ${tokenLabel(token)}`"
+            :data-testid="`board-field-token-${index}`"
+            :data-token="token"
+            @click.stop="openTokenPicker(cell, index)"
+          >
+            <img
+              :src="tokenImage(token)"
+              :alt="tokenLabel(token)"
+              :title="tokenLabel(token)"
+              decoding="async"
+              draggable="false"
+            />
+          </button>
+          <button
+            class="board-field__token-remove"
+            type="button"
+            :aria-label="`Remove ${tokenLabel(token)}`"
+            :data-testid="`board-field-token-remove-${index}`"
+            @click.stop="removeToken(cell, index)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="board-field__token-remove-disc" cx="12" cy="12" r="11.2" />
+              <path d="m8.4 8.4 7.2 7.2m0-7.2-7.2 7.2" />
+            </svg>
+          </button>
+        </span>
+      </div>
+
+      <!--
         Hover affordances. The hint says what a bare click will do — a plus on
         bare ground, swap arrows over a card — and is a hint only: the cell
         itself takes the click, so it stays out of the pointer's way. The token
@@ -98,6 +181,7 @@ function removeAt(cell) {
       -->
       <div class="board-field__overlay" data-testid="board-field-overlay">
         <span
+          v-if="!tokensAt(cell).length"
           class="board-field__hint"
           data-testid="board-field-hint"
           :data-hint="unitAt(cell) ? 'swap' : 'add'"
@@ -114,6 +198,7 @@ function removeAt(cell) {
           </svg>
         </span>
         <button
+          v-if="tokensAt(cell).length < MAX_TOKENS"
           class="board-field__add-token"
           type="button"
           data-testid="board-field-add-token"
@@ -136,11 +221,11 @@ function removeAt(cell) {
     />
 
     <TokenPickerDialog
-      v-if="activeTokenCell"
+      v-if="activeToken"
       :key="tokenScope"
       :scope="tokenScope"
       @select="placeToken"
-      @close="activeTokenCell = null"
+      @close="activeToken = null"
     />
   </div>
 </template>
@@ -168,6 +253,122 @@ function removeAt(cell) {
 .board-field .board-field__cell:hover {
   border-radius: 4%;
   background: var(--h3-hint-tint);
+}
+
+/*
+  Tokens are laid out by wrapping, not by counting: the box is only wide enough
+  for two, so one centres, two share a row, and the third and fourth drop to a
+  second row under them. Sizes are in `cqw` — a share of the cell — so the whole
+  arrangement holds at any zoom. The side padding is derived from the token size
+  so the box always fits exactly two across, whichever size is in play.
+*/
+.board-field__tokens {
+  --h3-token-gap: 4cqw;
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: var(--h3-token-gap);
+  padding: 0 calc((100cqw - 2 * var(--h3-token-size) - var(--h3-token-gap)) / 2);
+  pointer-events: none;
+}
+
+/*
+  A token on a unit is a marker read against the card, so it stays small; one on
+  bare ground is the whole point of the cell, so it takes the room.
+*/
+.board-field__tokens--on-unit {
+  --h3-token-size: 23cqw;
+}
+
+.board-field__tokens--on-field {
+  --h3-token-size: 39cqw;
+}
+
+.board-field__token {
+  position: relative;
+  display: block;
+  width: var(--h3-token-size);
+  height: var(--h3-token-size);
+  pointer-events: auto;
+}
+
+.board-field__token-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
+}
+
+.board-field__token-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
+}
+
+.board-field__token:hover .board-field__token-art,
+.board-field__token-art:focus-visible {
+  outline: none;
+  transform: scale(1.08);
+  filter: brightness(1.15) drop-shadow(0 0 5cqw rgba(249, 219, 156, 0.75));
+}
+
+.board-field__token-remove {
+  position: absolute;
+  top: -8%;
+  right: -8%;
+  display: flex;
+  width: 40%;
+  padding: 0;
+  color: var(--h3-hint-ink);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease;
+}
+
+.board-field__token:hover .board-field__token-remove,
+.board-field__token-remove:focus-visible {
+  opacity: 1;
+}
+
+.board-field__token-remove:hover {
+  color: #ffbea0;
+}
+
+.board-field__token-remove svg {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+}
+
+.board-field__token-remove-disc {
+  fill: var(--h3-hint-ground);
+  stroke: var(--h3-hint-edge);
+  stroke-width: 1;
+}
+
+.board-field__token-remove:hover .board-field__token-remove-disc {
+  stroke: currentColor;
 }
 
 /*

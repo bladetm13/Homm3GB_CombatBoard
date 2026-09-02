@@ -49,6 +49,19 @@ const tokenPicker = (wrapper) => wrapper.find('[data-testid="token-picker"]')
 const openTokens = (wrapper, cellIndex) =>
   cells(wrapper)[cellIndex].get('[data-testid="board-field-add-token"]').trigger('click')
 
+const FIREWALL = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL
+const QUICKSAND = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].QUICKSAND
+const DAMAGE_1 = TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON].DAMAGE_1
+
+/** Opens the picker over a cell and picks a token out of it. */
+async function placeToken(wrapper, cellIndex, token) {
+  await openTokens(wrapper, cellIndex)
+  await wrapper.get(`[data-testid="token-picker-token-${token}"]`).trigger('click')
+}
+
+const tokensIn = (cell) =>
+  cell.findAll('[data-token]').map((node) => node.attributes('data-token'))
+
 // Every picker remembers where it was left; each test starts from a clean one.
 beforeEach(clearPickerMemory)
 
@@ -346,5 +359,113 @@ describe('BoardField', () => {
     expect(wrapper.findAll('[data-testid="card"]')).toHaveLength(0)
     expect(wrapper.emitted('place')).toBeUndefined()
     expect(wrapper.emitted('update:units')).toBeUndefined()
+  })
+
+  it('lays the picked token on the cell it was picked for', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 6, FIREWALL)
+
+    expect(tokensIn(cells(wrapper)[6])).toEqual([FIREWALL])
+    expect(wrapper.findAll('[data-testid="board-field-tokens"]')).toHaveLength(1)
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '2-3': [FIREWALL] })
+  })
+
+  it('stacks up to four tokens on one cell, and offers no more after that', async () => {
+    const wrapper = mountField()
+    for (const token of [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND]) {
+      await placeToken(wrapper, 0, token)
+    }
+    const cell = cells(wrapper)[0]
+
+    expect(tokensIn(cell)).toEqual([FIREWALL, QUICKSAND, FIREWALL, QUICKSAND])
+    expect(cell.find('[data-testid="board-field-add-token"]').exists()).toBe(false)
+  })
+
+  it('hides the centre hint once a cell carries a token', async () => {
+    const wrapper = mountField()
+    expect(cells(wrapper)[0].find('[data-testid="board-field-hint"]').exists()).toBe(true)
+
+    await placeToken(wrapper, 0, FIREWALL)
+    expect(cells(wrapper)[0].find('[data-testid="board-field-hint"]').exists()).toBe(false)
+
+    // ...and brings it back when the last one comes off.
+    await cells(wrapper)[0].get('[data-testid="board-field-token-remove-0"]').trigger('click')
+    expect(cells(wrapper)[0].find('[data-testid="board-field-hint"]').exists()).toBe(true)
+  })
+
+  it('replaces the token that was clicked, from the same set it came from', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 0, FIREWALL)
+    await placeToken(wrapper, 0, QUICKSAND)
+
+    await cells(wrapper)[0].get('[data-testid="board-field-token-0"]').trigger('click')
+    expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
+      'Choose a field token',
+    )
+    await wrapper.get(`[data-testid="token-picker-token-${QUICKSAND}"]`).trigger('click')
+
+    // The first slot changed; the second is untouched, and nothing was added.
+    expect(tokensIn(cells(wrapper)[0])).toEqual([QUICKSAND, QUICKSAND])
+    expect(wrapper.emitted('place-token').at(-1)[0]).toMatchObject({ slot: 0, index: 0 })
+  })
+
+  it('takes a token off through its own cross, leaving the others in order', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 0, FIREWALL)
+    await placeToken(wrapper, 0, QUICKSAND)
+
+    await cells(wrapper)[0].get('[data-testid="board-field-token-remove-0"]').trigger('click')
+
+    expect(tokensIn(cells(wrapper)[0])).toEqual([QUICKSAND])
+    expect(wrapper.emitted('remove-token').at(-1)[0]).toMatchObject({
+      row: 1,
+      col: 1,
+      slot: 0,
+      token: FIREWALL,
+    })
+  })
+
+  it('drops the cell from the model once its last token is gone', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 0, FIREWALL)
+    await cells(wrapper)[0].get('[data-testid="board-field-token-remove-0"]').trigger('click')
+
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({})
+    expect(cells(wrapper)[0].find('[data-testid="board-field-tokens"]').exists()).toBe(false)
+  })
+
+  it('marks a unit with its own tokens, over the card', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await placeToken(wrapper, 0, DAMAGE_1)
+
+    const cell = cells(wrapper)[0]
+    expect(tokensIn(cell)).toEqual([DAMAGE_1])
+    expect(cardIn(cell).attributes('data-unit')).toBe(TITANS)
+    // The swap hint would sit under them, so it stands down.
+    expect(cell.find('[data-testid="board-field-hint"]').exists()).toBe(false)
+  })
+
+  it('takes the stack markers away with the stack they marked', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await placeToken(wrapper, 0, DAMAGE_1)
+
+    await cells(wrapper)[0].get('[data-testid="card-remove"]').trigger('click')
+
+    // Bare ground is not a place a unit token may be.
+    expect(cells(wrapper)[0].find('[data-testid="board-field-tokens"]').exists()).toBe(false)
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({})
+  })
+
+  it('lets the parent own the tokens through v-model:tokens', async () => {
+    const wrapper = mountField({ props: { tokens: { '1-1': [FIREWALL] } } })
+    expect(tokensIn(cells(wrapper)[0])).toEqual([FIREWALL])
+
+    await placeToken(wrapper, 1, QUICKSAND)
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({
+      '1-1': [FIREWALL],
+      '1-2': [QUICKSAND],
+    })
   })
 })

@@ -75,6 +75,7 @@ export enum UNIT_TOKENS_EFFECT {
 }
 
 export enum UNIT_TOKENS_STACK {
+  STACK_TOKEN = 'unit_tokens/stack-stack-token.png',
   ATTACK = 'unit_tokens/stack-attack.png',
   DEFENSE = 'unit_tokens/stack-defense.png',
   HP = 'unit_tokens/stack-hp.png',
@@ -87,7 +88,6 @@ export enum UNIT_TOKENS_SPELLS {
 }
 
 export enum UNIT_TOKENS_OTHER {
-  STACK_TOKEN = 'unit_tokens/other-stack-token.png',
   TIME = 'unit_tokens/other-time.png',
 }
 
