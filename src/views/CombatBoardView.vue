@@ -1,14 +1,33 @@
 <script setup>
+import { ref } from 'vue'
 import BoardField from '../components/BoardField/BoardField.vue'
+import BoardTools from '../components/BoardTools.vue'
 import CombatBoard from '../components/CombatBoard.vue'
+
+/*
+  The board's own state lives here rather than inside the field: the tools
+  beside the zoom widget write it out and read it back, and they sit outside the
+  board's transform, which the field does not.
+*/
+const units = ref({})
+const tokens = ref({})
+
+function load(board) {
+  units.value = board.units
+  tokens.value = board.tokens
+}
 </script>
 
 <template>
   <main class="combat-page">
     <CombatBoard>
       <div class="combat-page__field">
-        <BoardField />
+        <BoardField v-model:units="units" v-model:tokens="tokens" />
       </div>
+
+      <template #controls>
+        <BoardTools :units="units" :tokens="tokens" @import="load" />
+      </template>
     </CombatBoard>
   </main>
 </template>

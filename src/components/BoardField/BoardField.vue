@@ -3,13 +3,11 @@ import { computed, ref } from 'vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
+import { COLS, MAX_TOKENS, ROWS, cellKey } from './boardRules'
 import { hasCustomAssets } from './customAssets'
 import { tokenImage, tokenLabel } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
 import { useUnloadGuard } from '../../composables/useUnloadGuard'
-
-/** How many tokens one cell holds — two rows of two, and no more. */
-const MAX_TOKENS = 4
 
 const emit = defineEmits(['cell-click', 'place', 'place-token', 'remove', 'remove-token'])
 const units = defineModel('units', { type: Object, default: () => ({}) })
@@ -34,15 +32,14 @@ useUnloadGuard(
     hasCustomAssets(),
 )
 
-const cellKey = (cell) => `${cell.row}-${cell.col}`
 const unitAt = (cell) => units.value[cellKey(cell)]
 const tokensAt = (cell) => tokens.value[cellKey(cell)] ?? []
 
 const cells = computed(() =>
-  Array.from({ length: 20 }, (_, index) => ({
+  Array.from({ length: ROWS * COLS }, (_, index) => ({
     index,
-    row: Math.floor(index / 4) + 1,
-    col: (index % 4) + 1,
+    row: Math.floor(index / COLS) + 1,
+    col: (index % COLS) + 1,
   })),
 )
 

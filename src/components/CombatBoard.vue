@@ -175,14 +175,21 @@ onBeforeUnmount(() => {
       <slot :scale="scale" :board-width="baseWidth" :board-height="baseHeight" />
     </div>
 
-    <ZoomControls
-      :scale="scale"
-      :can-zoom-in="canZoomIn"
-      :can-zoom-out="canZoomOut"
-      @zoom-in="zoomIn()"
-      @zoom-out="zoomOut()"
-      @reset="reset()"
-    />
+    <!--
+      Everything that answers for the board as a whole, in one row in the
+      corner and outside the transform — where a control can still be clicked.
+    -->
+    <div class="combat-controls" data-no-drag>
+      <slot name="controls" />
+      <ZoomControls
+        :scale="scale"
+        :can-zoom-in="canZoomIn"
+        :can-zoom-out="canZoomOut"
+        @zoom-in="zoomIn()"
+        @zoom-out="zoomOut()"
+        @reset="reset()"
+      />
+    </div>
   </div>
 </template>
 
@@ -232,6 +239,20 @@ onBeforeUnmount(() => {
   box-shadow:
     0 0 0 1px rgba(181, 140, 74, 0.35),
     0 12px 48px rgba(0, 0, 0, 0.75);
+}
+
+/*
+  The widgets share one corner and one baseline: whichever of them grows — the
+  tools, when they have something to say — grows upwards off it.
+*/
+.combat-controls {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
 }
 
 /* Only while a pan/zoom is actually in flight — see RASTER_SETTLE_MS. */

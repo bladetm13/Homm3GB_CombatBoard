@@ -187,3 +187,72 @@ canvas {
       -30% 0;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Print — the board as it stands, on one page.
+
+   Paper has no pan, no zoom and no room for the furniture around the board, so
+   the transform is undone, the frame is dropped and the artwork is fitted to
+   the page at its own 1:2. The cards and tokens need no help: they are children
+   of the board and travel with it. The affordances need none either — they are
+   drawn on hover, and nothing is hovered on paper.
+   -------------------------------------------------------------------------- */
+@media print {
+  @page {
+    margin: 8mm;
+  }
+
+  html,
+  body,
+  #app {
+    height: auto;
+    overflow: visible;
+    background: #fff;
+  }
+
+  /*
+    The board's own artwork is the point of the page, so its background image
+    has to survive the printer's habit of dropping backgrounds. Everything else
+    painted behind it is screen dressing and goes, below.
+  */
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /*
+    Nothing outside the board is worth ink: the blurred cover, the vignette, the
+    wood the viewport is floored with, the widgets, and any dialog left open.
+
+    These fight the components' own scoped rules, which carry an attribute
+    selector apiece and so outrank a bare class — hence `!important` on
+    everything a scoped rule also sets.
+  */
+  .combat-backdrop,
+  .combat-vignette,
+  .combat-controls,
+  .picker__backdrop,
+  .preview__backdrop {
+    display: none !important;
+  }
+
+  .combat-viewport {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: none !important;
+  }
+
+  .combat-board {
+    /* Inline styles carry the live pan and zoom; on paper they mean nothing. */
+    width: auto !important;
+    height: 100vh !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    aspect-ratio: 1 / 2;
+    transform: none !important;
+    /* The glow and the drop shadow are light around the board, not board. */
+    border-color: rgba(0, 0, 0, 0.35) !important;
+    box-shadow: none !important;
+  }
+}

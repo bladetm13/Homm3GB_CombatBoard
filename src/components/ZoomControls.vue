@@ -43,11 +43,8 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'reset'])
 </template>
 
 <style scoped>
+/* Placed by `.combat-controls`, which stands it in a row with the board tools. */
 .zoom-controls {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 8px;

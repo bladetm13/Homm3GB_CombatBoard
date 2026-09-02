@@ -28,8 +28,12 @@ export interface CustomAsset {
   id: string
   scope: CustomScope
   label: string
+  /** The picked file's name — all a browser will say about where it came from. */
+  file: string
   /** An object URL over the picked file — never a path into `assets/`. */
   url: string
+  /** The file itself, kept so an export can carry the picture, not just its name. */
+  blob: Blob
   /** Taken off the list by its cross, but still drawn where it was laid down. */
   retired?: boolean
 }
@@ -97,10 +101,47 @@ export function addCustomAsset(scope: CustomScope | string, file: File): CustomA
     id: `${PREFIX}${scope}/${counter}`,
     scope: scope as CustomScope,
     label: labelFor(file),
+    file: file?.name ?? '',
     url: URL.createObjectURL(file),
+    blob: file,
   }
   assets.push(asset)
   return asset
+}
+
+/**
+ * Puts a picture back under the id an exported board refers to it by, so the
+ * cards and tokens laid on it come back with it. An id already here is simply
+ * offered again — a picture is never registered twice.
+ */
+export function restoreCustomAsset(
+  entry: { id: string; scope: CustomScope | string; label?: string },
+  file: File,
+): CustomAsset | undefined {
+  const existing = assets.find((asset) => asset.id === entry.id)
+  if (existing) {
+    existing.retired = false
+    return existing
+  }
+
+  const asset: CustomAsset = {
+    id: entry.id,
+    scope: entry.scope as CustomScope,
+    label: entry.label || labelFor(file),
+    file: file?.name ?? '',
+    url: URL.createObjectURL(file),
+    blob: file,
+  }
+  assets.push(asset)
+  // Ids are handed out in order; a restored one must not be handed out again.
+  counter = Math.max(counter, Number(entry.id.slice(entry.id.lastIndexOf('/') + 1)) || 0)
+  return asset
+}
+
+/** The whole entry behind an id, offered or retired, for whoever needs its name. */
+export function customEntry(id: unknown): CustomAsset | undefined {
+  if (!isCustomAsset(id)) return undefined
+  return assets.find((asset) => asset.id === id)
 }
 
 /** Forgets everything, releasing the object URLs with it. For tests. */
