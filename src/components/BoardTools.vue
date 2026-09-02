@@ -8,11 +8,14 @@ import {
   restorePictures,
   resolveSnapshot,
 } from './BoardField/boardSnapshot'
+import { pictureExtension, pictureType, renderBoardPicture } from '../composables/boardPicture'
+import { saveFile } from '../composables/saveFile'
 
 /**
- * The three things done to a whole board rather than to one cell of it: put it
- * on paper, write it to a file, read one back. They sit beside the zoom widget
- * because that is the other control that answers for the board as a whole.
+ * The four things done to a whole board rather than to one cell of it: save it
+ * as a picture, put it on paper, write it to a file, read one back. They sit
+ * beside the zoom widget because that is the other control that answers for the
+ * board as a whole.
  *
  * An exported file carries the user's own pictures inside it, so importing is
  * the one click it looks like.
@@ -24,6 +27,8 @@ import {
  * an empty cell.
  */
 const props = defineProps({
+  /** The board element itself, handed down by `CombatBoard` — what gets drawn. */
+  board: { default: null },
   units: { type: Object, default: () => ({}) },
   tokens: { type: Object, default: () => ({}) },
 })
@@ -47,13 +52,37 @@ function printBoard() {
   window.print()
 }
 
-async function exportBoard() {
-  const snapshot = await boardSnapshot({ units: props.units, tokens: props.tokens })
-  download(
-    `combat-board-${snapshot.savedAt.slice(0, 19).replace(/[:T]/g, '-')}.json`,
-    JSON.stringify(snapshot, null, 2),
-  )
+/*
+  The save dialog is opened first and the picture drawn after: a browser only
+  offers one while the click that asked for it is still fresh.
+*/
+function savePicture() {
+  const type = pictureType()
+  return saveFile({
+    name: `${stamped()}${pictureExtension(type)}`,
+    type,
+    extensions: [pictureExtension(type)],
+    description: 'Image',
+    produce: () => renderBoardPicture(props.board, type),
+  })
 }
+
+function exportBoard() {
+  return saveFile({
+    name: `${stamped()}.json`,
+    type: 'application/json',
+    extensions: ['.json'],
+    description: 'Board file',
+    produce: async () => {
+      const snapshot = await boardSnapshot({ units: props.units, tokens: props.tokens })
+      return new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
+    },
+  })
+}
+
+/** `combat-board-2026-09-02-14-30-00`, so two saves never land on one name. */
+const stamped = () =>
+  `combat-board-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`
 
 async function onJsonPicked(event) {
   const file = event.target.files?.[0]
@@ -79,22 +108,22 @@ async function onJsonPicked(event) {
   emit('import', { units, tokens })
 }
 
-function download(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  // The download has taken its own reference by now; ours can go.
-  setTimeout(() => URL.revokeObjectURL(url))
-}
 </script>
 
 <template>
   <div class="board-tools h3-panel" data-no-drag data-testid="board-tools">
     <div class="board-tools__buttons">
+      <Homm3Button
+        title="Save the board as an image"
+        data-testid="board-picture"
+        @click="savePicture"
+      >
+        <svg class="board-tools__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 16 5-5 3.5 3.5L15 11l6 6" />
+          <circle cx="8.5" cy="9.5" r="1.3" />
+        </svg>
+      </Homm3Button>
       <Homm3Button title="Print the board" data-testid="board-print" @click="printBoard">
         <svg class="board-tools__icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7 9V4h10v5" />

@@ -56,17 +56,35 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  delete window.showSaveFilePicker
   clearCustomAssets()
 })
 
 describe('BoardTools', () => {
-  it('offers the three whole-board tools beside the zoom widget', () => {
+  it('offers the four whole-board tools beside the zoom widget, picture first', () => {
     const wrapper = open()
-    for (const tool of ['board-print', 'board-export', 'board-import']) {
-      expect(wrapper.find(`[data-testid="${tool}"]`).exists()).toBe(true)
-    }
+    const tools = ['board-picture', 'board-print', 'board-export', 'board-import']
+    for (const tool of tools) expect(wrapper.find(`[data-testid="${tool}"]`).exists()).toBe(true)
+
+    expect(
+      wrapper.findAll('button').map((button) => button.attributes('data-testid')),
+    ).toEqual(tools)
     // Never dragged with the board underneath it.
     expect(wrapper.get('[data-testid="board-tools"]').attributes('data-no-drag')).toBeDefined()
+  })
+
+  it('asks where to put the picture, and names it for what it will be', async () => {
+    const asked = []
+    window.showSaveFilePicker = vi.fn(async (options) => {
+      asked.push(options)
+      throw new DOMException('cancelled', 'AbortError')
+    })
+
+    await open().get('[data-testid="board-picture"]').trigger('click')
+    await flush()
+
+    expect(asked[0].suggestedName).toMatch(/^combat-board-[\d-]+\.(webp|png)$/)
+    expect(Object.keys(asked[0].types[0].accept)[0]).toMatch(/^image\//)
   })
 
   it('hands the page to the browser to print', async () => {

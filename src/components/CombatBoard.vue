@@ -8,6 +8,7 @@ import { useBoardTransform } from '../composables/useBoardTransform.js'
 const BOARD_ASPECT_RATIO = 0.5
 
 const viewportEl = ref(null)
+const boardEl = ref(null)
 
 const {
   baseWidth,
@@ -162,6 +163,7 @@ onBeforeUnmount(() => {
 
     <!-- The board itself: transform container for every future card / unit. -->
     <div
+      ref="boardEl"
       class="combat-board"
       :class="{ 'is-transforming': transforming }"
       data-testid="combat-board"
@@ -180,7 +182,8 @@ onBeforeUnmount(() => {
       corner and outside the transform — where a control can still be clicked.
     -->
     <div class="combat-controls" data-no-drag>
-      <slot name="controls" />
+      <!-- The board element goes with it: a control may want to draw it. -->
+      <slot name="controls" :board="boardEl" />
       <ZoomControls
         :scale="scale"
         :can-zoom-in="canZoomIn"

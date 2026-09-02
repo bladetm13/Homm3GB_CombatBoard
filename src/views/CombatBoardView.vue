@@ -25,8 +25,8 @@ function load(board) {
         <BoardField v-model:units="units" v-model:tokens="tokens" />
       </div>
 
-      <template #controls>
-        <BoardTools :units="units" :tokens="tokens" @import="load" />
+      <template #controls="{ board }">
+        <BoardTools :board="board" :units="units" :tokens="tokens" @import="load" />
       </template>
     </CombatBoard>
   </main>
