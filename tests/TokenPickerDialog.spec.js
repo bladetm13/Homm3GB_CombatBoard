@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TokenPickerDialog from '../src/components/BoardField/TokenPickerDialog.vue'
+import {
+  CUSTOM_SCOPE,
+  addCustomAsset,
+  clearCustomAssets,
+} from '../src/components/BoardField/customAssets'
 import { clearPickerMemory } from '../src/components/BoardField/pickerMemory'
 import {
   TOKENS,
@@ -16,8 +21,17 @@ const open = (scope) =>
     global: { stubs: { teleport: true } },
   })
 
+/*
+  Every picker opens with a Custom section above its lists, so the categories
+  start one section in; these three count from the first of them.
+*/
 const openGroup = (wrapper, index) =>
-  wrapper.findAll('[data-testid="accordion-header"]')[index].trigger('click')
+  wrapper.findAll('[data-testid="accordion-header"]')[index + 1].trigger('click')
+
+const groupBodies = (wrapper) => wrapper.findAll('[data-testid="accordion-body"]').slice(1)
+
+const groupTitles = (wrapper) =>
+  wrapper.findAll('[data-testid="accordion-header"]').slice(1).map((h) => h.text())
 
 const tokensOf = (scope) =>
   Object.values(TOKENS[scope]).flatMap((group) => Object.values(group))
@@ -28,6 +42,9 @@ afterEach(() => {
 
 // Every picker remembers where it was left; each test starts from a clean one.
 beforeEach(clearPickerMemory)
+beforeEach(clearCustomAssets)
+
+const image = (name) => new File(['art'], name, { type: 'image/png' })
 
 describe('TokenPickerDialog', () => {
   it('teleports out of the board, into body', () => {
@@ -45,9 +62,33 @@ describe('TokenPickerDialog', () => {
     )
   })
 
+  it('opens each scope with a Custom section, above the categories and open', () => {
+    for (const scope of Object.values(TOKEN_SCOPE)) {
+      const wrapper = open(scope)
+      const headers = wrapper.findAll('[data-testid="accordion-header"]')
+      const bodies = wrapper.findAll('[data-testid="accordion-body"]')
+
+      expect(headers[0].text()).toContain('Custom')
+      expect(bodies[0].element.style.display).not.toBe('none')
+      expect(wrapper.find('[data-testid="token-picker-custom-add"]').exists()).toBe(true)
+    }
+  })
+
+  it('offers a token the user brought in, to the scope it was added to', async () => {
+    const custom = addCustomAsset(CUSTOM_SCOPE.UNIT_TOKENS, image('Poison.png'))
+
+    // The field list is a different drawer, and nothing of the unit one is in it.
+    expect(open(TOKEN_SCOPE.FIELD).find(`[data-testid="token-picker-token-${custom.id}"]`).exists())
+      .toBe(false)
+
+    const wrapper = open(TOKEN_SCOPE.UNIT)
+    await wrapper.get(`[data-testid="token-picker-token-${custom.id}"]`).trigger('click')
+    expect(wrapper.emitted('select')).toEqual([[custom.id]])
+  })
+
   it('shows field tokens by default, one group per category', () => {
     const wrapper = open()
-    const titles = wrapper.findAll('[data-testid="accordion-header"]').map((h) => h.text())
+    const titles = groupTitles(wrapper)
     const expected = Object.keys(TOKENS[TOKEN_SCOPE.FIELD]).map((c) => TOKEN_CATEGORY_LABEL[c])
 
     expect(titles).toHaveLength(expected.length)
@@ -59,7 +100,7 @@ describe('TokenPickerDialog', () => {
 
   it('switches the whole list, and the title, with the scope', () => {
     const wrapper = open(TOKEN_SCOPE.UNIT)
-    const titles = wrapper.findAll('[data-testid="accordion-header"]').map((h) => h.text())
+    const titles = groupTitles(wrapper)
     const expected = Object.keys(TOKENS[TOKEN_SCOPE.UNIT]).map((c) => TOKEN_CATEGORY_LABEL[c])
 
     expect(titles).toHaveLength(expected.length)
@@ -134,7 +175,7 @@ describe('TokenPickerDialog', () => {
     await openGroup(first, 2)
     first.unmount()
 
-    const bodies = open(TOKEN_SCOPE.UNIT).findAll('[data-testid="accordion-body"]')
+    const bodies = groupBodies(open(TOKEN_SCOPE.UNIT))
     expect(bodies[0].element.style.display).not.toBe('none')
     expect(bodies[2].element.style.display).not.toBe('none')
     expect(bodies[1].element.style.display).toBe('none')
@@ -147,7 +188,7 @@ describe('TokenPickerDialog', () => {
 
     // The field list has one group of its own; nothing the unit list did counts.
     const field = open(TOKEN_SCOPE.FIELD)
-    const bodies = field.findAll('[data-testid="accordion-body"]')
+    const bodies = groupBodies(field)
     expect(bodies).toHaveLength(1)
     expect(bodies[0].element.style.display).not.toBe('none')
   })

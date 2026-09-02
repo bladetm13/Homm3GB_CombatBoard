@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import BoardField from '../src/components/BoardField/BoardField.vue'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
+import {
+  CUSTOM_SCOPE,
+  addCustomAsset,
+  clearCustomAssets,
+} from '../src/components/BoardField/customAssets'
 import { clearPickerMemory } from '../src/components/BoardField/pickerMemory'
 import {
   TOKENS,
@@ -29,8 +34,10 @@ const cardIn = (cell) => cell.find('[data-testid="card"]')
  */
 async function pickUnit(wrapper, unit) {
   if (!wrapper.find(`[data-testid="picker-unit-${unit}"]`).exists()) {
-    const group = Object.keys(UNITS).indexOf(unit.slice(0, unit.indexOf('/')))
-    await wrapper.findAll('[data-testid="accordion-header"]')[group].trigger('click')
+    const type = unit.slice(0, unit.indexOf('/'))
+    await wrapper
+      .get(`[data-testid="picker-group-${type}"] [data-testid="accordion-header"]`)
+      .trigger('click')
   }
   await wrapper.get(`[data-testid="picker-unit-${unit}"]`).trigger('click')
 }
@@ -59,11 +66,25 @@ async function placeToken(wrapper, cellIndex, token) {
   await wrapper.get(`[data-testid="token-picker-token-${token}"]`).trigger('click')
 }
 
+/** What the browser sends on its way out; a cancelled one puts up the prompt. */
+function leavingThePage() {
+  const event = new Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(event)
+  return event
+}
+
 const tokensIn = (cell) =>
   cell.findAll('[data-token]').map((node) => node.attributes('data-token'))
 
 // Every picker remembers where it was left; each test starts from a clean one.
 beforeEach(clearPickerMemory)
+beforeEach(clearCustomAssets)
+
+/*
+  A board listens for the page being closed for as long as it is mounted, and
+  `window` outlives the test that mounted it — so each one is taken down again.
+*/
+enableAutoUnmount(afterEach)
 
 describe('BoardField', () => {
   it('lays out a 4x5 grid, matching the grid printed on the artwork', () => {
@@ -359,6 +380,42 @@ describe('BoardField', () => {
     expect(wrapper.findAll('[data-testid="card"]')).toHaveLength(0)
     expect(wrapper.emitted('place')).toBeUndefined()
     expect(wrapper.emitted('update:units')).toBeUndefined()
+  })
+
+  it('warns before the page goes, once there is a board to lose', async () => {
+    const wrapper = mountField()
+    expect(leavingThePage().defaultPrevented).toBe(false)
+
+    await placeUnit(wrapper, 6, TITANS)
+    expect(leavingThePage().defaultPrevented).toBe(true)
+  })
+
+  it('warns for tokens alone, and for a picture the user brought in', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 6, FIREWALL)
+    expect(leavingThePage().defaultPrevented).toBe(true)
+
+    wrapper.unmount()
+    mountField()
+    expect(leavingThePage().defaultPrevented).toBe(false)
+    addCustomAsset(CUSTOM_SCOPE.UNITS, new File(['art'], 'hero.png', { type: 'image/png' }))
+    expect(leavingThePage().defaultPrevented).toBe(true)
+  })
+
+  it('lays a custom picture down like any other card, art and all', async () => {
+    const custom = addCustomAsset(
+      CUSTOM_SCOPE.UNITS,
+      new File(['art'], 'Angry Peasant.png', { type: 'image/png' }),
+    )
+    const wrapper = mountField()
+
+    await cells(wrapper)[6].trigger('click')
+    await wrapper.get(`[data-testid="picker-unit-${custom.id}"]`).trigger('click')
+
+    const card = cardIn(cells(wrapper)[6])
+    expect(card.attributes('data-unit')).toBe(custom.id)
+    expect(card.get('img').attributes('alt')).toBe('Angry Peasant')
+    expect(wrapper.emitted('update:units').at(-1)[0]).toEqual({ '2-3': custom.id })
   })
 
   it('lays the picked token on the cell it was picked for', async () => {

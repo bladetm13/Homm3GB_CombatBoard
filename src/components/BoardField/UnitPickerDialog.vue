@@ -1,7 +1,9 @@
 <script setup>
 import Accordion from '../Accordion.vue'
 import Card from './Card.vue'
+import CustomAssets from './CustomAssets.vue'
 import PickerDialog from './PickerDialog.vue'
+import { CUSTOM_SCOPE } from './customAssets'
 import { pickerMemory } from './pickerMemory'
 import { UNITS, UNIT_TYPE_LABEL } from './constants'
 
@@ -9,6 +11,9 @@ const emit = defineEmits(['select', 'close'])
 
 /** Which groups the user left open last time; Castle only, on a first visit. */
 const memory = pickerMemory('unit-picker')
+
+/* The user's own cards come first, and the section stands open until closed. */
+const customOpen = memory.open.custom ?? true
 
 const groups = Object.entries(UNITS).map(([type, units], index) => ({
   type,
@@ -20,6 +25,13 @@ const groups = Object.entries(UNITS).map(([type, units], index) => ({
 
 <template>
   <PickerDialog title="Choose a unit" memory-key="unit-picker" @close="emit('close')">
+    <CustomAssets
+      :scope="CUSTOM_SCOPE.UNITS"
+      testid="picker"
+      :default-open="customOpen"
+      @select="emit('select', $event)"
+      @toggle="memory.open.custom = $event"
+    />
     <Accordion
       v-for="group in groups"
       :key="group.type"

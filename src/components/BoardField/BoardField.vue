@@ -3,8 +3,10 @@ import { computed, ref } from 'vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
+import { hasCustomAssets } from './customAssets'
 import { tokenImage, tokenLabel } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
+import { useUnloadGuard } from '../../composables/useUnloadGuard'
 
 /** How many tokens one cell holds — two rows of two, and no more. */
 const MAX_TOKENS = 4
@@ -19,6 +21,18 @@ const activeCell = ref(null)
  * land on: an index replaces that token, `null` adds one.
  */
 const activeToken = ref(null)
+
+/*
+  A laid-out board is the whole of the user's work and none of it is saved, so
+  leaving the page with anything on it — a card, a token, or a picture the user
+  brought in — is worth a word of warning first.
+*/
+useUnloadGuard(
+  () =>
+    Object.keys(units.value).length > 0 ||
+    Object.keys(tokens.value).length > 0 ||
+    hasCustomAssets(),
+)
 
 const cellKey = (cell) => `${cell.row}-${cell.col}`
 const unitAt = (cell) => units.value[cellKey(cell)]

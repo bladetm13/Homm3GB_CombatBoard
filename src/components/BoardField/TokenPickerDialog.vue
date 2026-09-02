@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import Accordion from '../Accordion.vue'
+import CustomAssets from './CustomAssets.vue'
 import PickerDialog from './PickerDialog.vue'
 import { pickerMemory } from './pickerMemory'
 import { tokenImage, tokenLabel } from './tokenAssets'
@@ -39,6 +40,9 @@ const title = computed(() => TITLE[props.scope])
 const memoryKey = `token-picker:${props.scope}`
 const memory = pickerMemory(memoryKey)
 
+/* The user's own tokens come first, and the section stands open until closed. */
+const customOpen = memory.open.custom ?? true
+
 const groups = computed(() =>
   Object.entries(TOKENS[props.scope]).map(([category, tokens], index) => ({
     category,
@@ -56,6 +60,13 @@ const groups = computed(() =>
     :memory-key="memoryKey"
     @close="emit('close')"
   >
+    <CustomAssets
+      :scope="scope"
+      testid="token-picker"
+      :default-open="customOpen"
+      @select="emit('select', $event)"
+      @toggle="memory.open.custom = $event"
+    />
     <Accordion
       v-for="group in groups"
       :key="group.category"
