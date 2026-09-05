@@ -1,0 +1,63 @@
+# Builds the board and publishes it to GitHub Pages.
+#
+# The site is served out of the repository's own folder, which `vite.config.js`
+# and the router both know about — see `base` in either. Nothing here writes to
+# a branch: the built folder is uploaded as an artifact and Pages serves it, so
+# the repository only ever holds source.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # ...and by hand, for a redeploy that no commit asked for.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never a cancelled one: a half-uploaded site is
+# worse than a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Yarn 4 comes from the `packageManager` field in package.json. This runs
+      # after `setup-node` because corepack ships with the Node it installs,
+      # which is also why the cache is left off: `setup-node`'s own yarn cache
+      # would need yarn to exist a step before it can.
+      - run: corepack enable
+
+      - run: yarn install --immutable
+
+      # The board is the whole product, and a broken one is not worth serving.
+      - run: yarn test
+
+      - run: yarn build
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

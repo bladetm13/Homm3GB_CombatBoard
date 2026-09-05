@@ -7,7 +7,13 @@ export const routes = [
 
 export function createAppRouter() {
   return createRouter({
-    history: createWebHistory(),
+    /*
+      The folder the app is served out of — `/` in development, the repository's
+      own folder on GitHub Pages. Vite fills it in from `base`. Without it the
+      router would look for `/Homm3GB_CombatBoard/` among its routes, find
+      nothing, and leave the page blank on a deploy that otherwise went fine.
+    */
+    history: createWebHistory(import.meta.env.BASE_URL),
     routes,
   })
 }
