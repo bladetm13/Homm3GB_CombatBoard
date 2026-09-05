@@ -76,6 +76,59 @@ function leavingThePage() {
 const tokensIn = (cell) =>
   cell.findAll('[data-token]').map((node) => node.attributes('data-token'))
 
+const POINTER = 7
+
+/** The card in a cell, which is also its drag handle. */
+const handleIn = (cell) => cell.get('[data-testid="card"]')
+
+/**
+ * Takes hold of the card in a cell. Nothing is in the air yet — the press has
+ * to travel `DRAG_THRESHOLD_PX` before it counts as a drag.
+ */
+const grab = (wrapper, cellIndex) =>
+  handleIn(cells(wrapper)[cellIndex]).trigger('pointerdown', {
+    pointerId: POINTER,
+    pointerType: 'mouse',
+    button: 0,
+    buttons: 1,
+    clientX: 0,
+    clientY: 0,
+  })
+
+/** A move of the pointer itself, which is what the page listens for. */
+async function movePointer(wrapper, x, y = 0) {
+  window.dispatchEvent(
+    new PointerEvent('pointermove', {
+      pointerId: POINTER,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+    }),
+  )
+  await wrapper.vm.$nextTick()
+}
+
+/** Carries the pointer over a cell, which is how the board hit-tests the drop. */
+const hover = (wrapper, cellIndex) => cells(wrapper)[cellIndex].trigger('pointermove')
+
+async function release(wrapper) {
+  window.dispatchEvent(new PointerEvent('pointerup', { pointerId: POINTER }))
+  await wrapper.vm.$nextTick()
+}
+
+/** Press, carry past the threshold, hover the target and let go. */
+async function dragCard(wrapper, from, to) {
+  await grab(wrapper, from)
+  await movePointer(wrapper, 40)
+  await hover(wrapper, to)
+  await release(wrapper)
+}
+
+const ghost = (wrapper) => wrapper.find('[data-testid="board-field-ghost"]')
+const dropStates = (wrapper) =>
+  cells(wrapper).map((cell) => cell.attributes('data-drop'))
+
 // Every picker remembers where it was left; each test starts from a clean one.
 beforeEach(clearPickerMemory)
 beforeEach(clearCustomAssets)
@@ -523,6 +576,230 @@ describe('BoardField', () => {
     expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({
       '1-1': [FIREWALL],
       '1-2': [QUICKSAND],
+    })
+  })
+  describe('dragging a card across the board', () => {
+    it('carries the card into an empty cell', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await dragCard(wrapper, 0, 6)
+
+      expect(cardIn(cells(wrapper)[0]).exists()).toBe(false)
+      expect(cardIn(cells(wrapper)[6]).attributes('data-unit')).toBe(TITANS)
+      expect(wrapper.emitted('update:units').at(-1)[0]).toEqual({ '2-3': TITANS })
+      expect(wrapper.emitted('move').at(-1)[0]).toMatchObject({
+        from: { index: 0, row: 1, col: 1 },
+        to: { index: 6, row: 2, col: 3 },
+        unit: TITANS,
+      })
+    })
+
+    it('lands on a cell that holds nothing but tokens, and leaves them there', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await placeToken(wrapper, 6, FIREWALL)
+      await dragCard(wrapper, 0, 6)
+
+      const cell = cells(wrapper)[6]
+      expect(cardIn(cell).attributes('data-unit')).toBe(TITANS)
+      expect(tokensIn(cell)).toEqual([FIREWALL])
+    })
+
+    it('refuses a cell that already holds a card, leaving both where they were', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await placeUnit(wrapper, 6, ARCHANGELS)
+
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40)
+      await hover(wrapper, 6)
+      expect(cells(wrapper)[6].attributes('data-drop')).toBe('no')
+
+      await release(wrapper)
+      expect(cardIn(cells(wrapper)[0]).attributes('data-unit')).toBe(TITANS)
+      expect(cardIn(cells(wrapper)[6]).attributes('data-unit')).toBe(ARCHANGELS)
+      expect(wrapper.emitted('move')).toBeUndefined()
+    })
+
+    it('marks the cell under the pointer, and only that one', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40)
+
+      await hover(wrapper, 6)
+      expect(dropStates(wrapper).filter(Boolean)).toEqual(['ok'])
+      expect(cells(wrapper)[6].attributes('data-drop')).toBe('ok')
+
+      // The cell it came from is not a move, so it has nothing to say.
+      await hover(wrapper, 0)
+      expect(dropStates(wrapper).filter(Boolean)).toEqual([])
+      await release(wrapper)
+    })
+
+    it('says nothing until the press has travelled far enough to be a drag', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+
+      await movePointer(wrapper, 3)
+      expect(ghost(wrapper).exists()).toBe(false)
+      expect(wrapper.get('[data-testid="board-field"]').classes()).not.toContain('is-dragging')
+
+      await movePointer(wrapper, 40)
+      expect(ghost(wrapper).exists()).toBe(true)
+      await release(wrapper)
+    })
+
+    it('leaves a press that never moved to the picker', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 2)
+      await release(wrapper)
+      await cells(wrapper)[0].trigger('click')
+
+      expect(picker(wrapper).exists()).toBe(true)
+    })
+
+    it('swallows the click a drop leaves behind', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await dragCard(wrapper, 0, 6)
+      await cells(wrapper)[6].trigger('click')
+
+      expect(picker(wrapper).exists()).toBe(false)
+      // ...and the one after it is a click again.
+      await cells(wrapper)[6].trigger('click')
+      expect(picker(wrapper).exists()).toBe(true)
+    })
+
+    it('carries the stack markers with the stack', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await placeToken(wrapper, 0, DAMAGE_1)
+      await dragCard(wrapper, 0, 6)
+
+      expect(tokensIn(cells(wrapper)[6])).toEqual([DAMAGE_1])
+      expect(cells(wrapper)[0].find('[data-testid="board-field-tokens"]').exists()).toBe(false)
+      expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '2-3': [DAMAGE_1] })
+    })
+
+    it('sets the markers down after whatever the cell already held', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await placeToken(wrapper, 0, DAMAGE_1)
+      await placeToken(wrapper, 6, FIREWALL)
+      await dragCard(wrapper, 0, 6)
+
+      expect(tokensIn(cells(wrapper)[6])).toEqual([FIREWALL, DAMAGE_1])
+    })
+
+    it('takes no more than the four a cell holds', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      for (const token of [DAMAGE_1, DAMAGE_1, DAMAGE_1]) await placeToken(wrapper, 0, token)
+      for (const token of [FIREWALL, QUICKSAND]) await placeToken(wrapper, 6, token)
+
+      await dragCard(wrapper, 0, 6)
+      expect(tokensIn(cells(wrapper)[6])).toEqual([FIREWALL, QUICKSAND, DAMAGE_1, DAMAGE_1])
+    })
+
+    it('shows the card being carried, and dims the place it left', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40, 25)
+
+      expect(ghost(wrapper).attributes('data-unit')).toBe(TITANS)
+      expect(ghost(wrapper).attributes('style')).toContain('translate3d(40px, 25px, 0)')
+      expect(cardIn(cells(wrapper)[0]).classes()).toContain('is-carried')
+
+      await release(wrapper)
+      expect(ghost(wrapper).exists()).toBe(false)
+    })
+
+    it('drops nothing when the pointer is let go off the board', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40)
+      await hover(wrapper, 6)
+      await wrapper.get('[data-testid="board-field"]').trigger('pointerleave')
+      await release(wrapper)
+
+      expect(cardIn(cells(wrapper)[0]).attributes('data-unit')).toBe(TITANS)
+      expect(wrapper.emitted('move')).toBeUndefined()
+    })
+
+    it('puts the card back on Escape', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40)
+      await hover(wrapper, 6)
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await wrapper.vm.$nextTick()
+      expect(ghost(wrapper).exists()).toBe(false)
+
+      await release(wrapper)
+      expect(cardIn(cells(wrapper)[0]).attributes('data-unit')).toBe(TITANS)
+      expect(wrapper.emitted('move')).toBeUndefined()
+    })
+
+    it('lets the card go when the pointer comes back with no button held', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40)
+
+      window.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: POINTER,
+          pointerType: 'mouse',
+          buttons: 0,
+          clientX: 80,
+        }),
+      )
+      await wrapper.vm.$nextTick()
+
+      expect(ghost(wrapper).exists()).toBe(false)
+      expect(cardIn(cells(wrapper)[0]).attributes('data-unit')).toBe(TITANS)
+    })
+
+    it('does not take hold of the card by its own controls', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+
+      const cross = cells(wrapper)[0].get('[data-testid="card-remove"]')
+      await cross.trigger('pointerdown', { pointerId: POINTER, pointerType: 'mouse', button: 0 })
+      await movePointer(wrapper, 40)
+      expect(ghost(wrapper).exists()).toBe(false)
+
+      await cross.trigger('click')
+      expect(cardIn(cells(wrapper)[0]).exists()).toBe(false)
+    })
+
+    it('ignores anything but the left button', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await handleIn(cells(wrapper)[0]).trigger('pointerdown', {
+        pointerId: POINTER,
+        pointerType: 'mouse',
+        button: 2,
+      })
+      await movePointer(wrapper, 40)
+
+      expect(ghost(wrapper).exists()).toBe(false)
+    })
+
+    it('keeps the board still while a card is carried over it', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      // `CombatBoard` skips its own pan for anything under `[data-no-drag]`.
+      expect(handleIn(cells(wrapper)[0]).attributes('data-no-drag')).toBeDefined()
     })
   })
 })

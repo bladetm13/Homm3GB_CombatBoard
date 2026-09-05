@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
@@ -7,9 +7,18 @@ import { COLS, MAX_TOKENS, ROWS, cellKey } from './boardRules'
 import { hasCustomAssets } from './customAssets'
 import { tokenImage, tokenLabel } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
+import { unitImage } from './unitAssets'
+import { useEscapeKey } from '../../composables/useEscapeKey'
 import { useUnloadGuard } from '../../composables/useUnloadGuard'
 
-const emit = defineEmits(['cell-click', 'place', 'place-token', 'remove', 'remove-token'])
+const emit = defineEmits([
+  'cell-click',
+  'move',
+  'place',
+  'place-token',
+  'remove',
+  'remove-token',
+])
 const units = defineModel('units', { type: Object, default: () => ({}) })
 const tokens = defineModel('tokens', { type: Object, default: () => ({}) })
 const activeCell = ref(null)
@@ -109,6 +118,179 @@ function removeAt(cell) {
   emit('remove', { ...cell, unit })
 }
 
+/*
+  Carrying a card from one cell to another.
+
+  A press on a card is not a drag yet: `press` keeps the bookkeeping until the
+  pointer has travelled far enough to mean it, and only then does `drag` open
+  and the ghost appear — so a plain click still opens the picker over the card.
+
+  The pointer is deliberately left uncaptured, because capture would send every
+  move to the card and the cells under it would never hear the pointer pass.
+  Instead each cell reports itself while the drag is live, the ghost keeps out
+  of the way with `pointer-events: none`, and a release the page never saw is
+  caught on the next move with no button held.
+*/
+const DRAG_THRESHOLD_PX = 4
+
+let press = null
+const drag = ref(null)
+
+/**
+ * A drag ends in a click the board would otherwise read as a bare cell click —
+ * over whichever cell the card was dropped on. This swallows that one click.
+ */
+let dropped = false
+
+/** A card may land on any cell that holds no unit — bare ground or tokens. */
+const canDrop = (cell) => !unitAt(cell)
+
+/**
+ * What the cell under the pointer has to say for itself: `ok` if the card can
+ * land there, `no` if it cannot, and nothing at all when no card is in the air
+ * or the cell is the one it came from.
+ */
+function dropState(cell) {
+  const carried = drag.value
+  if (!carried || carried.over?.index !== cell.index) return null
+  if (cell.index === carried.from.index) return null
+  return canDrop(cell) ? 'ok' : 'no'
+}
+
+function startPress(cell, event) {
+  // Left button only for the mouse; touch and pen always carry.
+  if (event.pointerType === 'mouse' && event.button !== 0) return
+  // The card's own controls — the eye and the cross — are not handles.
+  if (event.target?.closest?.('button')) return
+
+  const handle = event.currentTarget
+  const rect = handle.getBoundingClientRect()
+  /*
+    Touch hands the pointer to the element it went down on, which would hide
+    every cell the finger then passes over. The card does not need it.
+  */
+  if (handle.hasPointerCapture?.(event.pointerId)) {
+    handle.releasePointerCapture(event.pointerId)
+  }
+
+  dropped = false
+  press = {
+    cell,
+    unit: unitAt(cell),
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    // Where in the card it was taken hold of, so the ghost hangs off the same
+    // spot, and how big it is on screen at the board's current zoom.
+    grabX: event.clientX - rect.left,
+    grabY: event.clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+  }
+
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', endDrag)
+}
+
+function onPointerMove(event) {
+  if (!press || event.pointerId !== press.pointerId) return
+
+  if (!drag.value) {
+    const travelled = Math.hypot(event.clientX - press.startX, event.clientY - press.startY)
+    if (travelled < DRAG_THRESHOLD_PX) return
+    drag.value = {
+      from: press.cell,
+      unit: press.unit,
+      over: null,
+      width: press.width,
+      height: press.height,
+      x: 0,
+      y: 0,
+    }
+  } else if (event.pointerType === 'mouse' && event.buttons === 0) {
+    // Let go somewhere the page never heard about — off the window, most
+    // likely. The card goes back where it was rather than staying in the air.
+    endDrag()
+    return
+  }
+
+  drag.value.x = event.clientX - press.grabX
+  drag.value.y = event.clientY - press.grabY
+}
+
+/** The cell the pointer is over now — the cells are the drag's hit test. */
+function onCellOver(cell) {
+  if (!drag.value || drag.value.over?.index === cell.index) return
+  drag.value.over = cell
+}
+
+function onFieldLeave() {
+  if (drag.value) drag.value.over = null
+}
+
+function onPointerUp(event) {
+  if (!press || event.pointerId !== press.pointerId) return
+  const carried = drag.value
+  endDrag()
+  if (!carried) return
+
+  dropped = true
+  const target = carried.over
+  if (target && target.index !== carried.from.index && canDrop(target)) {
+    moveUnit(carried.from, target)
+  }
+}
+
+/** Puts the card down where it stands — nothing moves, the listeners go. */
+function endDrag() {
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', endDrag)
+  press = null
+  drag.value = null
+}
+
+useEscapeKey(() => {
+  if (drag.value) endDrag()
+})
+
+// A drag listens on `window`, which outlives the board it was started on.
+onBeforeUnmount(endDrag)
+
+function moveUnit(from, to) {
+  const fromKey = cellKey(from)
+  const toKey = cellKey(to)
+  const unit = units.value[fromKey]
+
+  units.value = { ...withoutKey(units.value, fromKey), [toKey]: unit }
+
+  /*
+    The markers belonged to the stack, so they travel with it — bare ground is
+    not a place unit tokens may be, and leaving them behind would only throw
+    them away. Whatever the cell already held keeps its slots; the arriving
+    markers fill what room is left of the four.
+  */
+  const carried = tokensAt(from)
+  if (carried.length) {
+    const next = [...tokensAt(to), ...carried].slice(0, MAX_TOKENS)
+    tokens.value = { ...withoutKey(tokens.value, fromKey), [toKey]: next }
+  }
+
+  emit('move', { from: { ...from }, to: { ...to }, unit })
+}
+
+/**
+ * The click a finished drag leaves behind, on its way to the cell it was
+ * dropped on. Caught on the way down, so no cell ever sees it.
+ */
+function onClickCapture(event) {
+  if (!dropped) return
+  dropped = false
+  event.stopPropagation()
+  event.preventDefault()
+}
+
 function withoutKey(source, key) {
   const { [key]: _dropped, ...rest } = source
   return rest
@@ -118,7 +300,10 @@ function withoutKey(source, key) {
 <template>
   <div
     class="board-field"
+    :class="{ 'is-dragging': !!drag }"
     data-testid="board-field"
+    @click.capture="onClickCapture"
+    @pointerleave="onFieldLeave"
   >
     <div
       v-for="cell in cells"
@@ -127,12 +312,22 @@ function withoutKey(source, key) {
       data-testid="board-field-cell"
       :data-row="cell.row"
       :data-col="cell.col"
+      :data-drop="dropState(cell)"
       @click="openPicker(cell)"
+      @pointermove="onCellOver(cell)"
     >
+      <!--
+        The card is the drag handle, and `data-no-drag` is what keeps the board
+        itself still while it is carried — see `CombatBoard`.
+      -->
       <Card
         v-if="unitAt(cell)"
         :unit="unitAt(cell)"
         removable
+        class="board-field__card"
+        :class="{ 'is-carried': drag?.from.index === cell.index }"
+        data-no-drag
+        @pointerdown="startPress(cell, $event)"
         @remove="removeAt(cell)"
       />
       <!--
@@ -238,6 +433,28 @@ function withoutKey(source, key) {
       @select="placeToken"
       @close="activeToken = null"
     />
+
+    <!--
+      The card under the pointer. It rides on `body` because the board it came
+      from is scaled and clipped, and it stays out of the pointer's way so the
+      cell beneath goes on reporting itself.
+    -->
+    <Teleport to="body">
+      <div
+        v-if="drag"
+        class="board-field__ghost"
+        data-testid="board-field-ghost"
+        :data-unit="drag.unit"
+        :style="{
+          width: `${drag.width}px`,
+          height: `${drag.height}px`,
+          transform: `translate3d(${drag.x}px, ${drag.y}px, 0)`,
+        }"
+        aria-hidden="true"
+      >
+        <img :src="unitImage(drag.unit)" alt="" draggable="false" />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -264,6 +481,61 @@ function withoutKey(source, key) {
 .board-field .board-field__cell:hover {
   border-radius: 4%;
   background: var(--h3-hint-tint);
+}
+
+/*
+  While a card is in the air the board stops answering the hover: the cell the
+  pointer is over says whether the card may land there instead, and the plates
+  and hints underneath would only read as an invitation to click.
+*/
+.board-field.is-dragging,
+.board-field.is-dragging .board-field__cell {
+  cursor: grabbing;
+}
+
+.board-field.is-dragging .board-field__overlay {
+  opacity: 0;
+}
+
+.board-field.is-dragging .board-field__cell:hover {
+  background: transparent;
+}
+
+.board-field.is-dragging .board-field__cell[data-drop='ok'] {
+  border-radius: 4%;
+  background: var(--h3-hint-tint);
+  box-shadow: inset 0 0 0 2px var(--h3-hint-ink);
+}
+
+/* Warm, like every other refusal on this board. */
+.board-field.is-dragging .board-field__cell[data-drop='no'] {
+  border-radius: 4%;
+  background: rgba(120, 32, 20, 0.3);
+  box-shadow: inset 0 0 0 2px rgba(255, 190, 160, 0.6);
+}
+
+/* The card is being carried; what is left in the cell is only its place. */
+.board-field__card.is-carried {
+  opacity: 0.28;
+}
+
+.board-field__ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* Over the board and its controls, under any dialog. */
+  z-index: 50;
+  opacity: 0.92;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.board-field__ghost img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.75));
 }
 
 /*
