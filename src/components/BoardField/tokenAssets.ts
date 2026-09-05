@@ -29,7 +29,7 @@ export function hasTokenImage(token: Token | string): boolean {
 }
 
 /** Short names that would read as words if they were merely capitalised. */
-const ACRONYMS = new Set(['hp'])
+const ACRONYMS = new Set(['hp', 'vi'])
 
 /**
  * A readable name for a token, used for alt text and tooltips:

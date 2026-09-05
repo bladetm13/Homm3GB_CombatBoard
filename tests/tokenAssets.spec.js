@@ -8,7 +8,7 @@ const everyToken = Object.values(TOKENS).flatMap((scope) =>
 
 describe('tokenAssets', () => {
   it('resolves a url for every token in every enum', () => {
-    expect(everyToken).toHaveLength(30)
+    expect(everyToken).toHaveLength(31)
     for (const token of everyToken) {
       expect(hasTokenImage(token), token).toBe(true)
       expect(tokenImage(token), token).toBeTruthy()
@@ -38,8 +38,11 @@ describe('tokenAssets', () => {
   it('labels a token by its name, without the category prefix', () => {
     expect(tokenLabel(TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON].DAMAGE_1)).toBe('Damage 1')
     expect(tokenLabel(TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.STACK].HP)).toBe('HP')
-    expect(tokenLabel(TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL_LUNA)).toBe(
-      'Firewall Luna',
+    expect(tokenLabel(TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL_LUNA_I)).toBe(
+      'Firewall Luna I',
+    )
+    expect(tokenLabel(TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL_LUNA_VI)).toBe(
+      'Firewall Luna VI',
     )
   })
 

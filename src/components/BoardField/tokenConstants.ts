@@ -45,7 +45,8 @@ export const TOKEN_CATEGORY_LABEL: Record<TOKEN_CATEGORY, string> = {
 /** Spell markers that occupy a cell: each spread, then its numbered variants. */
 export enum FIELD_TOKENS_SPELLS {
   FIREWALL = 'field_tokens/spells-firewall.png',
-  FIREWALL_LUNA = 'field_tokens/spells-firewall-luna.png',
+  FIREWALL_LUNA_I = 'field_tokens/spells-firewall-luna-i.png',
+  FIREWALL_LUNA_VI = 'field_tokens/spells-firewall-luna-vi.png',
   FORCE_FIELD = 'field_tokens/spells-force-field.png',
   LAND_MINE = 'field_tokens/spells-land-mine.png',
   LAND_MINE_0 = 'field_tokens/spells-land-mine-0.png',
