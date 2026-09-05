@@ -24,16 +24,16 @@ tool for that space:
 ## What's in it
 
 - The 4×5 grid printed on the board, over the board art, with pan and zoom.
-- **278 cards** — all ten towns, neutrals of every tier, creature banks, summoned
+- **270+ cards** — all ten towns, neutrals of every tier, creature banks, summoned
   creatures, war machines, walls and gates, and one back per deck.
-- **31 tokens** — field effects (firewall, quicksand, land mine, force field, clone) and
+- **30+ tokens** — field effects (firewall, quicksand, land mine, force field, clone) and
   stack markers (damage, defence, paralysis, attack/weakness, stack stats, time). Up to
   four to a cell.
 - Every card opens full size, so its stats and abilities can actually be read.
 - Cards drag between cells; a cell that holds a card will not take another.
 - A −1 / 0 / +1 die, for whatever the table needs one for.
 - **Your own pictures** for homebrew units and tokens, dropped in from disk.
-- Export as PNG or JSON, print, or read a saved layout back — the pictures you added
+- Export as WEBP or JSON, print, or read a saved layout back — the pictures you added
   travel inside the JSON, so one file is the whole board.
 
 ## Running it
@@ -55,25 +55,6 @@ The dev server answers on `/Homm3GB_CombatBoard/` rather than `/` because that i
 the deployed site lives, and `base` is one value shared by dev, preview and production.
 Forking this under another repository name means changing `base` in
 [`vite.config.js`](vite.config.js) to match — the router reads it from there.
-
-## Deploying
-
-Pushing to `main` builds and publishes the site: see
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). The tests run first, so a
-failing build never reaches the site. In the repository, Settings → Pages → Source must
-be set to **GitHub Actions**.
-
-## Layout
-
-```
-assets/           card and token artwork, globbed at build time
-src/components/
-  CombatBoard     the board: pan, zoom, the artwork underneath
-  BoardField/     the 4×5 grid, the pieces on it, and the pickers
-  BoardTools      save as picture, print, export, import
-  BoardDice       the die
-tests/            vitest, one spec per module
-```
 
 ## Licence
 
