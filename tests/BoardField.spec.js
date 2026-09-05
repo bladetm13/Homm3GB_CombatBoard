@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import BoardField from '../src/components/BoardField/BoardField.vue'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
@@ -801,5 +801,89 @@ describe('BoardField', () => {
       // `CombatBoard` skips its own pan for anything under `[data-no-drag]`.
       expect(handleIn(cells(wrapper)[0]).attributes('data-no-drag')).toBeDefined()
     })
+  })
+})
+
+/*
+  Reported from the app: after some fiddling, the first click on a cross or on
+  the token plate did nothing and the second one worked. A drag that ended
+  outside the grid was leaving the swallow armed, and it ate the next real
+  click. These pin the behaviour down.
+*/
+describe('BoardField — the click a drag leaves behind', () => {
+  /** Carries a card out of the grid and lets it go there. */
+  async function dragOffTheField(wrapper, from) {
+    await grab(wrapper, from)
+    await movePointer(wrapper, 40)
+    await wrapper.get('[data-testid="board-field"]').trigger('pointerleave')
+    await release(wrapper)
+  }
+
+  /** What the browser sends after a drag that ended outside the field. */
+  function clickOn(element) {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    element.dispatchEvent(event)
+    return event
+  }
+
+  it('eats that click wherever it lands, not only inside the grid', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await dragOffTheField(wrapper, 0)
+
+    // The drag ended off the grid, so the click lands on an ancestor of the
+    // field — which is exactly the one the old listener never saw.
+    expect(clickOn(document.body).defaultPrevented).toBe(true)
+  })
+
+  it('lets the next click through once the leftover is gone', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await dragOffTheField(wrapper, 0)
+    clickOn(document.body)
+
+    await cells(wrapper)[1].trigger('click')
+    expect(picker(wrapper).exists()).toBe(true)
+  })
+
+  it('opens the token plate on the first click after such a drag', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await dragOffTheField(wrapper, 0)
+    clickOn(document.body)
+
+    await openTokens(wrapper, 3)
+    expect(tokenPicker(wrapper).exists()).toBe(true)
+  })
+
+  it('takes the cross on the first click after such a drag', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    await placeUnit(wrapper, 5, ARCHANGELS)
+    await dragOffTheField(wrapper, 0)
+    clickOn(document.body)
+
+    await cells(wrapper)[5].get('[data-testid="card-remove"]').trigger('click')
+    expect(cardIn(cells(wrapper)[5]).exists()).toBe(false)
+  })
+
+  it('gives up waiting when the drag left no click at all', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    // A touch drag sends no click of its own; nothing must be eaten later.
+    await dragOffTheField(wrapper, 0)
+
+    // The clock has to stay wound forward for both checks: going back to the
+    // real one would put the release inside the window again.
+    vi.useFakeTimers()
+    try {
+      vi.advanceTimersByTime(300)
+      expect(clickOn(document.body).defaultPrevented).toBe(false)
+
+      await cells(wrapper)[1].trigger('click')
+      expect(picker(wrapper).exists()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

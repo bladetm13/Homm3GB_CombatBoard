@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
@@ -137,10 +137,26 @@ let press = null
 const drag = ref(null)
 
 /**
- * A drag ends in a click the board would otherwise read as a bare cell click —
- * over whichever cell the card was dropped on. This swallows that one click.
+ * When the last drag was let go.
+ *
+ * A drag that begins and ends over one cell leaves a click behind, and the cell
+ * would read it as a bare click and open the picker over the card just moved —
+ * so that one click is eaten. Two things about how it is eaten matter:
+ *
+ * The listener is on `window`, not on the field. The click lands on whatever
+ * the pointer went down and came up over have in common, which for a drag that
+ * ended outside the grid is some ancestor of the field — a listener on the
+ * field would never see it, and would still be waiting to eat the user's next
+ * real click.
+ *
+ * And it is a moment in time rather than a flag, because a drag may leave no
+ * click at all: a touch drag sends none, and a flag would sit armed until
+ * something else came along to be swallowed instead.
  */
-let dropped = false
+let droppedAt = 0
+
+/** How long after a release a click can still be the one it left behind. */
+const DROP_CLICK_MS = 250
 
 /** A card may land on any cell that holds no unit — bare ground or tokens. */
 const canDrop = (cell) => !unitAt(cell)
@@ -173,7 +189,7 @@ function startPress(cell, event) {
     handle.releasePointerCapture(event.pointerId)
   }
 
-  dropped = false
+  droppedAt = 0
   press = {
     cell,
     unit: unitAt(cell),
@@ -235,7 +251,7 @@ function onPointerUp(event) {
   endDrag()
   if (!carried) return
 
-  dropped = true
+  droppedAt = Date.now()
   const target = carried.over
   if (target && target.index !== carried.from.index && canDrop(target)) {
     moveUnit(carried.from, target)
@@ -280,16 +296,16 @@ function moveUnit(from, to) {
   emit('move', { from: { ...from }, to: { ...to }, unit })
 }
 
-/**
- * The click a finished drag leaves behind, on its way to the cell it was
- * dropped on. Caught on the way down, so no cell ever sees it.
- */
-function onClickCapture(event) {
-  if (!dropped) return
-  dropped = false
+/** The click a finished drag leaves behind — caught before anything sees it. */
+function swallowDropClick(event) {
+  if (!droppedAt || Date.now() - droppedAt > DROP_CLICK_MS) return
+  droppedAt = 0
   event.stopPropagation()
   event.preventDefault()
 }
+
+onMounted(() => window.addEventListener('click', swallowDropClick, true))
+onBeforeUnmount(() => window.removeEventListener('click', swallowDropClick, true))
 
 function withoutKey(source, key) {
   const { [key]: _dropped, ...rest } = source
@@ -302,7 +318,6 @@ function withoutKey(source, key) {
     class="board-field"
     :class="{ 'is-dragging': !!drag }"
     data-testid="board-field"
-    @click.capture="onClickCapture"
     @pointerleave="onFieldLeave"
   >
     <div
