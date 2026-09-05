@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import BoardDice from '../components/BoardDice.vue'
 import BoardField from '../components/BoardField/BoardField.vue'
 import BoardTools from '../components/BoardTools.vue'
 import CombatBoard from '../components/CombatBoard.vue'
@@ -26,6 +27,7 @@ function load(board) {
       </div>
 
       <template #controls="{ board }">
+        <BoardDice />
         <BoardTools :board="board" :units="units" :tokens="tokens" @import="load" />
       </template>
     </CombatBoard>

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import CombatBoardView from '../src/views/CombatBoardView.vue'
+import BoardDice from '../src/components/BoardDice.vue'
 import BoardTools from '../src/components/BoardTools.vue'
 import CombatBoard from '../src/components/CombatBoard.vue'
 import BoardField from '../src/components/BoardField/BoardField.vue'
@@ -35,6 +36,18 @@ describe('CombatBoardView', () => {
     expect(wrapper.find('[data-testid="zoom-readout"]').exists()).toBe(true)
     // Inside the board would mean panned, zoomed and dragged along with it.
     expect(wrapper.get('[data-testid="combat-board"]').element.contains(tools.element)).toBe(false)
+  })
+
+  it('stands the die widget left of the tools, in the same corner row', () => {
+    const wrapper = mount(CombatBoardView, { attachTo: document.body })
+    const row = wrapper.get('.combat-controls').element
+    const dice = wrapper.getComponent(BoardDice).element
+    const tools = wrapper.getComponent(BoardTools).element
+
+    expect(row.contains(dice)).toBe(true)
+    // Left of the tools is, in a row laid out in order, before them.
+    expect(dice.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(wrapper.get('[data-testid="combat-board"]').element.contains(dice)).toBe(false)
   })
 
   it('lays an imported board out on the field', async () => {
