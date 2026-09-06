@@ -289,6 +289,146 @@ describe('CombatBoard', () => {
     expect(VIEWPORT.height / 2 + y - scaledH / 2).toBeLessThan(VIEWPORT.height)
   })
 
+  /*
+    Two fingers pinch: how far apart they are is the scale, and their midpoint
+    is both the anchor the board is hung on and the handle it is carried by.
+  */
+  describe('pinching to zoom', () => {
+    const finger = (wrapper, type, id, x, y) =>
+      fire(wrapper, type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y })
+
+    /** Two fingers down, centred on the viewport and `gap` px apart. */
+    async function twoDown(wrapper, gap) {
+      const mid = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 }
+      await finger(wrapper, 'pointerdown', 1, mid.x - gap / 2, mid.y)
+      await finger(wrapper, 'pointerdown', 2, mid.x + gap / 2, mid.y)
+      return mid
+    }
+
+    const scaleOf = (wrapper) =>
+      Number(board(wrapper).attributes('style').match(/scale\(([\d.]+)\)/)[1])
+
+    it('zooms by what the fingers do, not by how far they travel', async () => {
+      const wrapper = await mountBoard()
+      const mid = await twoDown(wrapper, 200)
+
+      // Twice as far apart is twice the scale.
+      await finger(wrapper, 'pointermove', 1, mid.x - 200, mid.y)
+      await finger(wrapper, 'pointermove', 2, mid.x + 200, mid.y)
+      expect(scaleOf(wrapper)).toBeCloseTo(2, 5)
+
+      // And back to where they started is back to where the board started —
+      // the gesture is measured against its own beginning, so nothing drifts.
+      await finger(wrapper, 'pointermove', 1, mid.x - 100, mid.y)
+      await finger(wrapper, 'pointermove', 2, mid.x + 100, mid.y)
+      expect(scaleOf(wrapper)).toBeCloseTo(1, 5)
+    })
+
+    it('zooms out as the fingers close', async () => {
+      const wrapper = await mountBoard()
+      const mid = await twoDown(wrapper, 400)
+
+      await finger(wrapper, 'pointermove', 1, mid.x - 100, mid.y)
+      await finger(wrapper, 'pointermove', 2, mid.x + 100, mid.y)
+
+      expect(scaleOf(wrapper)).toBeCloseTo(0.75, 5)
+      expect(scaleOf(wrapper)).toBeGreaterThanOrEqual(MIN_SCALE)
+    })
+
+    it('carries the board along with the midpoint', async () => {
+      const wrapper = await mountBoard()
+      const mid = await twoDown(wrapper, 200)
+
+      // Both fingers 60px left: the gap is unchanged, so this is a pan alone.
+      await finger(wrapper, 'pointermove', 1, mid.x - 100 - 60, mid.y)
+      await finger(wrapper, 'pointermove', 2, mid.x + 100 - 60, mid.y)
+
+      expect(scaleOf(wrapper)).toBeCloseTo(1, 5)
+      expect(boardOffset(wrapper)[0]).toBeCloseTo(-60, 5)
+    })
+
+    it('takes the gesture off a pan the first finger had started', async () => {
+      const wrapper = await mountBoard()
+      const at = scaleOf(wrapper)
+
+      await finger(wrapper, 'pointerdown', 1, 500, 450)
+      await finger(wrapper, 'pointermove', 1, 400, 450)
+      const panned = boardOffset(wrapper)[0]
+
+      // The second finger arrives; from here the two of them are the gesture.
+      await finger(wrapper, 'pointerdown', 2, 800, 450)
+      await finger(wrapper, 'pointermove', 1, 300, 450)
+
+      // The lone pointer no longer pans on its own...
+      expect(boardOffset(wrapper)[0]).not.toBeCloseTo(panned - 100, 5)
+      // ...it half-opens the pinch instead.
+      expect(scaleOf(wrapper)).toBeGreaterThan(at)
+    })
+
+    it('hands the board back to the finger still down', async () => {
+      const wrapper = await mountBoard()
+      for (let i = 0; i < STEPS_TO_LIMIT; i += 1) await click(wrapper, 'zoom-in')
+      const mid = await twoDown(wrapper, 200)
+
+      await finger(wrapper, 'pointerup', 2, mid.x + 100, mid.y)
+      const after = boardOffset(wrapper)
+
+      // From where it is now, not from where it was first put down.
+      await finger(wrapper, 'pointermove', 1, mid.x - 100 - 40, mid.y)
+
+      expect(boardOffset(wrapper)[0]).toBeCloseTo(after[0] - 40, 5)
+      expect(viewport(wrapper).classes()).toContain('is-dragging')
+    })
+
+    it('stops when the last finger goes', async () => {
+      const wrapper = await mountBoard()
+      const mid = await twoDown(wrapper, 200)
+      await finger(wrapper, 'pointerup', 1, mid.x - 100, mid.y)
+      await finger(wrapper, 'pointerup', 2, mid.x + 100, mid.y)
+
+      expect(viewport(wrapper).classes()).not.toContain('is-dragging')
+
+      const resting = boardOffset(wrapper)
+      await finger(wrapper, 'pointermove', 1, 0, 0)
+      expect(boardOffset(wrapper)).toEqual(resting)
+    })
+
+    /* The widgets are in front of the board, not part of it. */
+    it('is not started by fingers on the zoom controls', async () => {
+      const wrapper = await mountBoard()
+      await fire(
+        wrapper,
+        'pointerdown',
+        { pointerId: 1, pointerType: 'touch', clientX: 1150, clientY: 850 },
+        'zoom-in',
+      )
+      await fire(
+        wrapper,
+        'pointerdown',
+        { pointerId: 2, pointerType: 'touch', clientX: 1100, clientY: 850 },
+        'zoom-out',
+      )
+      await finger(wrapper, 'pointermove', 1, 600, 450)
+      await finger(wrapper, 'pointermove', 2, 200, 450)
+
+      expect(scaleOf(wrapper)).toBeCloseTo(1, 5)
+      expect(boardOffset(wrapper)).toEqual([0, 0])
+    })
+
+    it('drops the whole gesture when a pointer is cancelled', async () => {
+      const wrapper = await mountBoard()
+      const mid = await twoDown(wrapper, 200)
+      await fire(wrapper, 'pointercancel', { pointerId: 1 })
+
+      const resting = boardOffset(wrapper)
+      await finger(wrapper, 'pointermove', 2, mid.x + 400, mid.y)
+
+      expect(scaleOf(wrapper)).toBeCloseTo(1, 5)
+      expect(boardOffset(wrapper)).toEqual(resting)
+      expect(viewport(wrapper).classes()).not.toContain('is-dragging')
+    })
+  })
+
   it('renders the blurred backdrop from the same artwork', async () => {
     const wrapper = await mountBoard()
     const backdrop = wrapper.get('.combat-backdrop').attributes('style')

@@ -46,6 +46,14 @@
   --h3-widget-icon: 22px;
   /* How far the widget row stands off the corner of the viewport. */
   --h3-widget-inset: 18px;
+
+  /*
+    The picker's card grid: how narrow a card is allowed to get before a column
+    is dropped. A card is 209x290, so this decides the height of a row as much
+    as the width of one, and the breakpoints at the foot of this file set it
+    from whichever of the screen's two dimensions is the one running out.
+  */
+  --h3-card-column: 165px;
 }
 
 * {
@@ -212,6 +220,37 @@ canvas {
     --h3-widget-gap: 4px;
     --h3-widget-icon: 16px;
     --h3-widget-inset: 8px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The picker's cards, on a screen that is short of one dimension or the other.
+
+   A phone upright runs out of width: at 165px a 360px screen fits a single
+   column, and one card standing the full width of the screen is a long scroll
+   for a list of forty. A share rather than a width puts two to a row, and the
+   two of them divide whatever there is.
+
+   A short window — a phone on its side, most often — runs out of height
+   instead, and there the card's own 209:290 is what makes it too big: a row is
+   a third taller than it is wide, and one row is the whole screen. The size is
+   worked back from that, so two rows stand on screen at once: the picker is
+   94vh, its head and the open group's heading come off the top, what is left
+   is halved, and 209/290 of that is how wide a card may be. The clamp is for
+   the screens the arithmetic runs off either end of.
+
+   Height last: a screen that is both narrow and short is short first, or two
+   columns would each be taller than the screen they stand on.
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  :root {
+    --h3-card-column: 45%;
+  }
+}
+
+@media (max-height: 560px) {
+  :root {
+    --h3-card-column: clamp(72px, calc(33vh - 38px), 165px);
   }
 }
 

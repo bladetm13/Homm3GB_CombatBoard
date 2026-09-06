@@ -67,7 +67,7 @@ const groups = Object.entries(UNITS).map(([type, units], index) => ({
 <style scoped>
 .picker__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--h3-card-column), 1fr));
   gap: 10px;
 }
 

@@ -44,6 +44,19 @@ watch(transform, () => {
 })
 
 let resizeObserver = null
+
+/*
+  Every finger on the board, by pointer id. One of them pans; two of them pinch.
+
+  The map holds fingers that came down on a card as well as on bare board:
+  carrying a card is the field's gesture, not the board's, but a second finger
+  arriving over one is still the second half of a pinch — and the field gives
+  the card up when it sees that finger. The widgets are the one thing kept out
+  of the map: they are furniture in front of the board, not the board.
+*/
+const points = new Map()
+
+/** The one-finger pan. */
 const drag = {
   pressed: false,
   moved: false,
@@ -54,25 +67,28 @@ const drag = {
   lastY: 0,
 }
 
+/** The two-finger pinch: which fingers, and what they were doing at the start. */
+let pinch = null
+
 function measure() {
   const el = viewportEl.value
   if (!el) return
   setContainerSize(el.clientWidth, el.clientHeight)
 }
 
-/** Pointer position relative to the viewport center — the zoom anchor. */
-function pointFromEvent(event) {
+/** A point relative to the viewport center — which is the zoom anchor. */
+function fromCentre(clientX, clientY) {
   const el = viewportEl.value
   if (!el) return { x: 0, y: 0 }
   const rect = el.getBoundingClientRect()
   return {
-    x: event.clientX - (rect.left + rect.width / 2),
-    y: event.clientY - (rect.top + rect.height / 2),
+    x: clientX - (rect.left + rect.width / 2),
+    y: clientY - (rect.top + rect.height / 2),
   }
 }
 
 function onWheel(event) {
-  const { x, y } = pointFromEvent(event)
+  const { x, y } = fromCentre(event.clientX, event.clientY)
   zoomByWheel(event.deltaY, x, y)
 }
 
@@ -81,9 +97,28 @@ function isOverlayUi(target) {
   return typeof target?.closest === 'function' && target.closest('[data-no-drag]') !== null
 }
 
+/**
+ * The widget row in the corner. It is in front of the board rather than part of
+ * it, so a press there is neither a pan nor half a pinch — unlike a press on a
+ * card, which `isOverlayUi` also catches but which is still a finger on the
+ * board as far as zooming is concerned.
+ */
+function isWidget(target) {
+  return typeof target?.closest === 'function' && target.closest('.combat-controls') !== null
+}
+
 function onPointerDown(event) {
-  // Left button only for the mouse; touch and pen always drag.
+  // Left button only for the mouse; touch and pen always count.
   if (event.pointerType === 'mouse' && event.button !== 0) return
+  if (isWidget(event.target)) return
+
+  points.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+  // The second finger is a pinch, and takes the gesture off whatever had it.
+  if (points.size === 2) return startPinch()
+  if (points.size > 2) return
+
+  // A card is carried by the field; the board holds still under it.
   if (isOverlayUi(event.target)) return
   drag.pressed = true
   drag.moved = false
@@ -93,6 +128,13 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
+  const point = points.get(event.pointerId)
+  if (point) {
+    point.x = event.clientX
+    point.y = event.clientY
+  }
+
+  if (pinch) return movePinch()
   if (!drag.pressed || event.pointerId !== drag.pointerId) return
 
   if (!drag.moved) {
@@ -110,16 +152,87 @@ function onPointerMove(event) {
   drag.lastY = event.clientY
 }
 
+/*
+  Pinch to zoom.
+
+  The two fingers are read as one gesture: how far apart they are says what the
+  scale should be, and where their midpoint is says what the board should be
+  hung on. Both are measured against where they started rather than accumulated
+  step by step, so the board comes back to exactly the scale it left at if the
+  fingers do — no drift over a long, fiddly pinch.
+*/
+function startPinch() {
+  // Whatever the first finger was doing, the second one takes over from it.
+  releaseDrag()
+  const [a, b] = [...points.keys()]
+  pinch = { ids: [a, b], gap: gapNow(a, b), centre: centreNow(a, b), scale: scale.value }
+  setDragging(true)
+}
+
+const gapNow = (a, b) =>
+  Math.max(1, Math.hypot(points.get(a).x - points.get(b).x, points.get(a).y - points.get(b).y))
+
+const centreNow = (a, b) => ({
+  x: (points.get(a).x + points.get(b).x) / 2,
+  y: (points.get(a).y + points.get(b).y) / 2,
+})
+
+function movePinch() {
+  const [a, b] = pinch.ids
+  if (!points.has(a) || !points.has(b)) return
+
+  // The board rides along with the midpoint, and opens or closes under it.
+  const centre = centreNow(a, b)
+  panBy(centre.x - pinch.centre.x, centre.y - pinch.centre.y)
+  pinch.centre = centre
+
+  const { x, y } = fromCentre(centre.x, centre.y)
+  zoomTo((pinch.scale * gapNow(a, b)) / pinch.gap, x, y)
+}
+
+function onPointerUp(event) {
+  points.delete(event.pointerId)
+
+  if (pinch) {
+    const [a, b] = pinch.ids
+    if (points.has(a) && points.has(b)) return
+    pinch = null
+    // A finger still down goes back to panning, from wherever it is now rather
+    // than from where it was put down — otherwise the board jumps.
+    const [id] = [...points.keys()]
+    if (id === undefined) return endDrag(event)
+    const point = points.get(id)
+    drag.pressed = drag.moved = true
+    drag.pointerId = id
+    drag.startX = drag.lastX = point.x
+    drag.startY = drag.lastY = point.y
+    return
+  }
+
+  if (event.pointerId === drag.pointerId) endDrag(event)
+}
+
+/** Lets go of the pan without touching the fingers — a pinch is taking over. */
+function releaseDrag() {
+  drag.pressed = false
+  drag.moved = false
+  drag.pointerId = null
+}
+
 function endDrag(event) {
-  if (!drag.pressed) return
   const target = event?.currentTarget
   if (event?.pointerId != null && target?.hasPointerCapture?.(event.pointerId)) {
     target.releasePointerCapture(event.pointerId)
   }
-  drag.pressed = false
-  drag.moved = false
-  drag.pointerId = null
+  releaseDrag()
   setDragging(false)
+}
+
+/** A cancelled pointer takes the whole gesture with it — fingers and all. */
+function onPointerCancel(event) {
+  points.delete(event.pointerId)
+  pinch = null
+  endDrag(event)
 }
 
 onMounted(() => {
@@ -148,8 +261,8 @@ onBeforeUnmount(() => {
     @wheel.prevent="onWheel"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
-    @pointerup="endDrag"
-    @pointercancel="endDrag"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerCancel"
     @contextmenu.prevent
     @dragstart.prevent
   >

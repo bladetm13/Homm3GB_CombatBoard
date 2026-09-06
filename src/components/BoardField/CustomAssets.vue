@@ -172,7 +172,7 @@ function onPicked(event) {
 
 /* The two shapes, and the cell widths, of the pickers themselves. */
 .custom__grid--cards {
-  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--h3-card-column), 1fr));
 }
 
 .custom__grid--tokens {

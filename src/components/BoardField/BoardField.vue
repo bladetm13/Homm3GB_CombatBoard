@@ -4,12 +4,19 @@ import BoardToken from './BoardToken.vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
-import { COLS, ROWS, VISIBLE_TOKENS, cellKey } from './boardRules'
+import {
+  COLS,
+  ROWS,
+  VISIBLE_TOKENS,
+  VISIBLE_TOKENS_ON_STACK_TOUCH,
+  cellKey,
+} from './boardRules'
 import { hasCustomAssets } from './customAssets'
 import { tokenScopeOf } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
 import { unitImage } from './unitAssets'
 import { useEscapeKey } from '../../composables/useEscapeKey'
+import { useTouchScreen } from '../../composables/useTouchScreen'
 import { useUnloadGuard } from '../../composables/useUnloadGuard'
 
 const emit = defineEmits([
@@ -55,11 +62,21 @@ const stackTokensAt = (cell) =>
 const fieldTokensAt = (cell) =>
   tokensAt(cell).filter((token) => tokenScopeOf(token) !== TOKEN_SCOPE.UNIT)
 
+const touch = useTouchScreen()
+
+/**
+ * How many tokens this cell has room to draw. Four as the artwork is printed,
+ * and two on a stack under a finger, where they are drawn big enough to be
+ * worth aiming at — see `VISIBLE_TOKENS_ON_STACK_TOUCH`.
+ */
+const slotsOn = (cell) =>
+  touch.value && unitAt(cell) ? VISIBLE_TOKENS_ON_STACK_TOUCH : VISIBLE_TOKENS
+
 /**
  * More tokens than the cell has room to draw. The rest are not lost — the last
  * slot becomes the chip that opens every one of them.
  */
-const crowded = (cell) => tokensAt(cell).length > VISIBLE_TOKENS
+const crowded = (cell) => tokensAt(cell).length > slotsOn(cell)
 
 /**
  * The tokens the cell draws itself. They all fit until the cell is crowded;
@@ -67,7 +84,7 @@ const crowded = (cell) => tokensAt(cell).length > VISIBLE_TOKENS
  * are slots.
  */
 const shownTokensAt = (cell) =>
-  crowded(cell) ? tokensAt(cell).slice(0, VISIBLE_TOKENS - 1) : tokensAt(cell)
+  crowded(cell) ? tokensAt(cell).slice(0, slotsOn(cell) - 1) : tokensAt(cell)
 
 /**
  * Lays `list` on a cell, or takes the cell out of the model when nothing is
@@ -279,6 +296,13 @@ function dropState(cell) {
 function startPress(cell, event) {
   // Left button only for the mouse; touch and pen always carry.
   if (event.pointerType === 'mouse' && event.button !== 0) return
+  /*
+    And only the first finger down. A second one is the board's — half of the
+    pinch that zooms it — and a card is carried by one hand or not at all. This
+    is the half of that rule that stops a card being picked up mid-pinch;
+    `onSecondPointer` below is the half that puts one down again.
+  */
+  if (!event.isPrimary) return
   // The card's own controls — the eye and the cross — are not handles.
   if (event.target?.closest?.('button')) return
 
@@ -315,6 +339,21 @@ function startPress(cell, event) {
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
   window.addEventListener('pointercancel', endDrag)
+  window.addEventListener('pointerdown', onSecondPointer)
+}
+
+/*
+  A second finger anywhere means the board is being pinched, and a card cannot
+  be carried by a board that is moving underneath it. It goes back where it came
+  from and the gesture is the board's.
+
+  The listener hears the very press that added it — a listener put on `window`
+  mid-dispatch still runs when the event reaches `window` — so the pointer that
+  started the carry has to be let through.
+*/
+function onSecondPointer(event) {
+  if (!press || event.pointerId === press.pointerId) return
+  endDrag()
 }
 
 /** Gives up a capture the browser set for us, wherever it put it. */
@@ -376,6 +415,7 @@ function endDrag() {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
   window.removeEventListener('pointercancel', endDrag)
+  window.removeEventListener('pointerdown', onSecondPointer)
   press = null
   drag.value = null
 }
@@ -623,6 +663,14 @@ function withoutKey(source, key) {
 }
 
 .board-field__cell {
+  /*
+    What a token standing on bare ground is, which is as big as one gets. It is
+    declared here rather than on the row that uses it because the popover is
+    that row's sibling, and on a touch screen the two draw a token the same
+    size — see the media query at the foot of this file.
+  */
+  --h3-token-ground: 39cqw;
+
   position: relative;
   /* The hover affordances size themselves off the cell — see `cqw` below. */
   container-type: size;
@@ -725,7 +773,37 @@ function withoutKey(source, key) {
 }
 
 .board-field__tokens--on-field {
-  --h3-token-size: 39cqw;
+  --h3-token-size: var(--h3-token-ground);
+}
+
+/*
+  On a touch screen a marker is drawn as big as a board effect, and the card
+  gives up the room.
+
+  A marker is small so the card can still be read under it, which holds as long
+  as the cross that takes it off is a share of it. It is not: a finger needs a
+  floor in pixels, and against a marker a quarter of a cell wide — twenty
+  points, on a board scaled to fit a phone — that floor is most of the token.
+  A cross that covers what it is attached to is worse than a card read through
+  a bigger marker.
+*/
+@media (hover: none) and (pointer: coarse) {
+  /*
+    And down the middle of the card rather than across it.
+
+    Two of these side by side are as wide as the card they stand on, and the
+    card's own stats are printed down its left edge — which is the half of it a
+    player actually needs to read. In a column they clear that edge, and the
+    artwork shows either side of them. Two is all a column holds; a third token
+    turns the second into the chip, as a fifth does on bare ground.
+  */
+  .board-field__tokens--on-unit {
+    --h3-token-size: var(--h3-token-ground);
+
+    flex-direction: column;
+    /* The side padding fits exactly two across, which a column does not need. */
+    padding: 0;
+  }
 }
 
 /*
@@ -784,6 +862,9 @@ function withoutKey(source, key) {
     slack at all — a cell is a hundred-odd pixels wide, so the two pixels it
     takes are most of a percent, and an arrangement that adds up to exactly a
     hundred wraps rather than fits.
+
+    Two to a row on a touch screen, where a token this small is mostly the
+    cross that takes it off — see the media query at the foot of this file.
   */
   --h3-token-size: 24cqw;
   --h3-crowd-gap: 4cqw;
@@ -944,6 +1025,22 @@ function withoutKey(source, key) {
     opacity: 1;
   }
 
+  /*
+    The popover follows the markers above, for the same reason and to the same
+    size: two to a row rather than three. Two of these, a gap and the padding
+    come to 92 of the cell's 100 — a third could not stand beside them if it
+    tried. It leaves the popover taller, which is the cheap half of the trade:
+    it has the whole board to grow over, and a token in it is now the size a
+    token is everywhere else.
+
+    It stands here, below `.board-field__crowd` itself, because a media query
+    carries no weight of its own — an override written above the rule it means
+    to override simply never lands.
+  */
+  .board-field__crowd {
+    --h3-token-size: var(--h3-token-ground);
+  }
+
   .board-field__hint[data-hint='swap'] {
     display: none;
   }
@@ -953,6 +1050,7 @@ function withoutKey(source, key) {
     font-size: max(8cqw, 12px);
     opacity: 0.75;
     pointer-events: auto;
+    bottom: 4%;
   }
 
   .board-field__add-token-label {

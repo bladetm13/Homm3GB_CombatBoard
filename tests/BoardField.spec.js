@@ -106,15 +106,22 @@ const handleIn = (cell) => cell.get('[data-testid="card"]')
 /**
  * Takes hold of the card in a cell. Nothing is in the air yet — the press has
  * to travel `DRAG_THRESHOLD_PX` before it counts as a drag.
+ *
+ * `isPrimary` is spelled out because a synthetic pointer event defaults it to
+ * false, where a real one is true for a mouse and for the first finger down —
+ * and only a primary pointer carries a card, so that a second finger is free to
+ * be half of a pinch.
  */
-const grab = (wrapper, cellIndex) =>
+const grab = (wrapper, cellIndex, init = {}) =>
   handleIn(cells(wrapper)[cellIndex]).trigger('pointerdown', {
     pointerId: POINTER,
     pointerType: 'mouse',
     button: 0,
     buttons: 1,
+    isPrimary: true,
     clientX: 0,
     clientY: 0,
+    ...init,
   })
 
 /**
@@ -128,6 +135,7 @@ async function touchPress(element) {
       bubbles: true,
       pointerId: POINTER,
       pointerType: 'touch',
+      isPrimary: true,
       clientX: 0,
       clientY: 0,
     }),
@@ -172,6 +180,26 @@ const dropStates = (wrapper) =>
 // Every picker remembers where it was left; each test starts from a clean one.
 beforeEach(clearPickerMemory)
 beforeEach(clearCustomAssets)
+
+/*
+  A screen that cannot hover. The board asks once, when it is mounted, so this
+  has to be in place before `mountField` — and put back after, or every test
+  that follows would be reading the board with a finger.
+*/
+let realMatchMedia
+function pretendTouchScreen() {
+  realMatchMedia = window.matchMedia
+  window.matchMedia = (query) => ({
+    matches: query.includes('hover: none'),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })
+}
+
+afterEach(() => {
+  if (realMatchMedia) window.matchMedia = realMatchMedia
+  realMatchMedia = undefined
+})
 
 /*
   A board listens for the page being closed for as long as it is mounted, and
@@ -893,7 +921,12 @@ describe('BoardField', () => {
       await placeUnit(wrapper, 0, TITANS)
 
       const cross = cells(wrapper)[0].get('[data-testid="card-remove"]')
-      await cross.trigger('pointerdown', { pointerId: POINTER, pointerType: 'mouse', button: 0 })
+      await cross.trigger('pointerdown', {
+        pointerId: POINTER,
+        pointerType: 'mouse',
+        button: 0,
+        isPrimary: true,
+      })
       await movePointer(wrapper, 40)
       expect(ghost(wrapper).exists()).toBe(false)
 
@@ -908,7 +941,43 @@ describe('BoardField', () => {
         pointerId: POINTER,
         pointerType: 'mouse',
         button: 2,
+        isPrimary: true,
       })
+      await movePointer(wrapper, 40)
+
+      expect(ghost(wrapper).exists()).toBe(false)
+    })
+
+    /*
+      A card is carried by one hand or not at all. A second finger is the
+      board's — half of the pinch that zooms it — and a card cannot be carried
+      by a board that is moving underneath it.
+    */
+    it('puts a carried card back when a second finger arrives', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+      await grab(wrapper, 0)
+      await movePointer(wrapper, 40)
+      expect(ghost(wrapper).exists()).toBe(true)
+
+      window.dispatchEvent(
+        new PointerEvent('pointerdown', { pointerId: POINTER + 1, pointerType: 'touch' }),
+      )
+      await wrapper.vm.$nextTick()
+
+      expect(ghost(wrapper).exists()).toBe(false)
+      // And it is back where it started, not dropped wherever it was let go.
+      await hover(wrapper, 6)
+      await release(wrapper)
+      expect(cardIn(cells(wrapper)[0]).exists()).toBe(true)
+      expect(cardIn(cells(wrapper)[6]).exists()).toBe(false)
+    })
+
+    it('does not take hold of a card with a second finger', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+
+      await grab(wrapper, 0, { isPrimary: false, pointerType: 'touch' })
       await movePointer(wrapper, 40)
 
       expect(ghost(wrapper).exists()).toBe(false)
@@ -1120,6 +1189,63 @@ describe('BoardField — a cell with more tokens than it can draw', () => {
     expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({
       '1-1': [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND, QUICKSAND],
     })
+  })
+})
+
+/*
+  A finger has no hover, so the cross that takes a token off is always drawn and
+  needs a floor in pixels to be worth aiming at — which makes a marker on a
+  stack as big as a board effect. Two of those across cover the card's stats, so
+  a stack under a finger wears two in a column instead of four in a square, and
+  the chip comes out one token sooner.
+*/
+describe('BoardField — a stack read with a finger', () => {
+  it('draws two markers on a stack, and the chip once there is a third', async () => {
+    pretendTouchScreen()
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    for (const token of [DAMAGE_1, DAMAGE_1]) await placeToken(wrapper, 0, token)
+
+    expect(drawnIn(cells(wrapper)[0])).toEqual([DAMAGE_1, DAMAGE_1])
+    expect(chipIn(cells(wrapper)[0]).exists()).toBe(false)
+
+    await placeToken(wrapper, 0, DAMAGE_1)
+
+    expect(drawnIn(cells(wrapper)[0])).toEqual([DAMAGE_1])
+    expect(chipIn(cells(wrapper)[0]).exists()).toBe(true)
+  })
+
+  it('opens all three from the chip, the drawn one and the two behind it', async () => {
+    pretendTouchScreen()
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    for (const token of [DAMAGE_1, DAMAGE_1, DAMAGE_1]) await placeToken(wrapper, 0, token)
+
+    await chipIn(cells(wrapper)[0]).trigger('click')
+
+    expect(crowdTokens(cells(wrapper)[0])).toEqual([DAMAGE_1, DAMAGE_1, DAMAGE_1])
+  })
+
+  /* Bare ground has no card to hide, so it keeps the four the artwork prints. */
+  it('leaves an empty cell its four', async () => {
+    pretendTouchScreen()
+    const wrapper = mountField()
+    for (const token of [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND]) {
+      await placeToken(wrapper, 0, token)
+    }
+
+    expect(drawnIn(cells(wrapper)[0])).toEqual([FIREWALL, QUICKSAND, FIREWALL, QUICKSAND])
+    expect(chipIn(cells(wrapper)[0]).exists()).toBe(false)
+  })
+
+  /* A mouse reads the card at its own size and keeps all four on the stack. */
+  it('keeps four on a stack for a pointer that hovers', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 0, TITANS)
+    for (const token of [DAMAGE_1, DAMAGE_1, DAMAGE_1]) await placeToken(wrapper, 0, token)
+
+    expect(drawnIn(cells(wrapper)[0])).toEqual([DAMAGE_1, DAMAGE_1, DAMAGE_1])
+    expect(chipIn(cells(wrapper)[0]).exists()).toBe(false)
   })
 })
 
