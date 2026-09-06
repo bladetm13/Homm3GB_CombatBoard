@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import BoardField from '../src/components/BoardField/BoardField.vue'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
 import {
@@ -66,6 +67,27 @@ async function placeToken(wrapper, cellIndex, token) {
   await wrapper.get(`[data-testid="token-picker-token-${token}"]`).trigger('click')
 }
 
+/** The chip that stands in the last slot of a cell holding more than it draws. */
+const chipIn = (cell) => cell.find('[data-testid="board-field-token-more"]')
+
+/** The popover that chip opens, and the tokens it lists. */
+const crowdIn = (cell) => cell.find('[data-testid="board-field-crowd"]')
+const crowdTokens = (cell) => tokensIn(crowdIn(cell))
+
+/** The tokens the cell draws itself, which past four is not all of them. */
+const drawnIn = (cell) => tokensIn(cell.get('[data-testid="board-field-tokens"]'))
+
+/** Lays five tokens on a cell: one more than the four it has room to draw. */
+async function crowd(wrapper, cellIndex) {
+  for (const token of [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND, FIREWALL]) {
+    await placeToken(wrapper, cellIndex, token)
+  }
+  return cells(wrapper)[cellIndex]
+}
+
+const hoverChip = (cell) => chipIn(cell).trigger('pointerenter', { pointerType: 'mouse' })
+const leaveCrowd = (cell) => crowdIn(cell).trigger('pointerleave', { pointerType: 'mouse' })
+
 /** What the browser sends on its way out; a cancelled one puts up the prompt. */
 function leavingThePage() {
   const event = new Event('beforeunload', { cancelable: true })
@@ -94,6 +116,24 @@ const grab = (wrapper, cellIndex) =>
     clientX: 0,
     clientY: 0,
   })
+
+/**
+ * A finger going down on `element`, which the browser captures the pointer to.
+ * The card is the listener, but the artwork inside it is what a press lands on,
+ * so the event has to be dispatched there for the target to be right.
+ */
+async function touchPress(element) {
+  element.dispatchEvent(
+    new PointerEvent('pointerdown', {
+      bubbles: true,
+      pointerId: POINTER,
+      pointerType: 'touch',
+      clientX: 0,
+      clientY: 0,
+    }),
+  )
+  await nextTick()
+}
 
 /** A move of the pointer itself, which is what the page listens for. */
 async function movePointer(wrapper, x, y = 0) {
@@ -480,7 +520,7 @@ describe('BoardField', () => {
     expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '2-3': [FIREWALL] })
   })
 
-  it('stacks up to four tokens on one cell, and offers no more after that', async () => {
+  it('draws four tokens on one cell, and goes on offering more', async () => {
     const wrapper = mountField()
     for (const token of [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND]) {
       await placeToken(wrapper, 0, token)
@@ -488,7 +528,8 @@ describe('BoardField', () => {
     const cell = cells(wrapper)[0]
 
     expect(tokensIn(cell)).toEqual([FIREWALL, QUICKSAND, FIREWALL, QUICKSAND])
-    expect(cell.find('[data-testid="board-field-add-token"]').exists()).toBe(false)
+    expect(cell.find('[data-testid="board-field-add-token"]').exists()).toBe(true)
+    expect(chipIn(cell).exists()).toBe(false)
   })
 
   it('hides the centre hint once a cell carries a token', async () => {
@@ -566,6 +607,52 @@ describe('BoardField', () => {
     // Bare ground is not a place a unit token may be.
     expect(cells(wrapper)[0].find('[data-testid="board-field-tokens"]').exists()).toBe(false)
     expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({})
+  })
+
+  /*
+    Reported from the app: a board effect laid on an empty cell was being
+    treated as the property of whatever stack later stood on it — carried off
+    when the stack moved, thrown away when it was taken off the board. A marker
+    is put on a stack and belongs to it; an effect is laid on the ground and
+    belongs to the cell, and the two share a cell often enough to tell apart.
+  */
+  it('leaves a board effect behind when the stack standing on it is taken off', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 0, FIREWALL)
+    await placeUnit(wrapper, 0, TITANS)
+    await placeToken(wrapper, 0, DAMAGE_1)
+
+    await cells(wrapper)[0].get('[data-testid="card-remove"]').trigger('click')
+
+    expect(tokensIn(cells(wrapper)[0])).toEqual([FIREWALL])
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '1-1': [FIREWALL] })
+  })
+
+  it('replaces a board effect from the field set, stack standing on it or not', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 0, FIREWALL)
+    await placeUnit(wrapper, 0, TITANS)
+
+    await cells(wrapper)[0].get('[data-testid="board-field-token-0"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
+      'Choose a field token',
+    )
+    await wrapper.get(`[data-testid="token-picker-token-${QUICKSAND}"]`).trigger('click')
+    expect(tokensIn(cells(wrapper)[0])).toEqual([QUICKSAND])
+  })
+
+  it('replaces a stack marker from the unit set, board effect underneath or not', async () => {
+    const wrapper = mountField()
+    await placeToken(wrapper, 0, FIREWALL)
+    await placeUnit(wrapper, 0, TITANS)
+    await placeToken(wrapper, 0, DAMAGE_1)
+
+    await cells(wrapper)[0].get('[data-testid="board-field-token-1"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
+      'Choose a unit token',
+    )
   })
 
   it('lets the parent own the tokens through v-model:tokens', async () => {
@@ -686,6 +773,22 @@ describe('BoardField', () => {
       expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '2-3': [DAMAGE_1] })
     })
 
+    it('leaves a board effect in the cell the stack walked off', async () => {
+      const wrapper = mountField()
+      await placeToken(wrapper, 0, FIREWALL)
+      await placeUnit(wrapper, 0, TITANS)
+      await placeToken(wrapper, 0, DAMAGE_1)
+
+      await dragCard(wrapper, 0, 6)
+
+      expect(tokensIn(cells(wrapper)[0])).toEqual([FIREWALL])
+      expect(tokensIn(cells(wrapper)[6])).toEqual([DAMAGE_1])
+      expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({
+        '1-1': [FIREWALL],
+        '2-3': [DAMAGE_1],
+      })
+    })
+
     it('sets the markers down after whatever the cell already held', async () => {
       const wrapper = mountField()
       await placeUnit(wrapper, 0, TITANS)
@@ -696,14 +799,30 @@ describe('BoardField', () => {
       expect(tokensIn(cells(wrapper)[6])).toEqual([FIREWALL, DAMAGE_1])
     })
 
-    it('takes no more than the four a cell holds', async () => {
+    /*
+      Reported from the app: a stack carrying four markers onto a cell that
+      already held some quietly lost whichever ones would not fit in the four
+      slots the artwork has. Everything comes along now; the cell draws four of
+      them and offers the rest behind its chip.
+    */
+    it('sets every marker down, however many the cell ends up holding', async () => {
       const wrapper = mountField()
       await placeUnit(wrapper, 0, TITANS)
       for (const token of [DAMAGE_1, DAMAGE_1, DAMAGE_1]) await placeToken(wrapper, 0, token)
       for (const token of [FIREWALL, QUICKSAND]) await placeToken(wrapper, 6, token)
 
       await dragCard(wrapper, 0, 6)
-      expect(tokensIn(cells(wrapper)[6])).toEqual([FIREWALL, QUICKSAND, DAMAGE_1, DAMAGE_1])
+
+      expect(wrapper.emitted('update:tokens').at(-1)[0]['2-3']).toEqual([
+        FIREWALL,
+        QUICKSAND,
+        DAMAGE_1,
+        DAMAGE_1,
+        DAMAGE_1,
+      ])
+      // Four slots: three tokens and the chip that stands for the rest.
+      expect(drawnIn(cells(wrapper)[6])).toEqual([FIREWALL, QUICKSAND, DAMAGE_1])
+      expect(chipIn(cells(wrapper)[6]).exists()).toBe(true)
     })
 
     it('shows the card being carried, and dims the place it left', async () => {
@@ -801,6 +920,48 @@ describe('BoardField', () => {
       // `CombatBoard` skips its own pan for anything under `[data-no-drag]`.
       expect(handleIn(cells(wrapper)[0]).attributes('data-no-drag')).toBeDefined()
     })
+
+    /*
+      Reported from the app: on a phone the card followed the finger and then
+      always came home, wherever it was let go.
+
+      A touch press captures the pointer to the element it landed on, and every
+      move after that is delivered there instead of to whatever is under the
+      finger — so no cell ever reported itself and there was nothing to drop
+      onto. The board gives that capture up, but a press on a card lands on the
+      artwork inside it, and the capture was only ever asked for back from the
+      card. These two pin down that it is asked of whichever of them holds it.
+    */
+    it('gives up the capture the browser put on the artwork under the finger', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+
+      const art = cells(wrapper)[0].get('[data-testid="card"] img').element
+      const released = []
+      art.hasPointerCapture = () => true
+      art.releasePointerCapture = (id) => released.push(id)
+
+      await touchPress(art)
+
+      expect(released).toEqual([POINTER])
+    })
+
+    it('leaves a capture alone when nothing holds it', async () => {
+      const wrapper = mountField()
+      await placeUnit(wrapper, 0, TITANS)
+
+      const art = cells(wrapper)[0].get('[data-testid="card"] img').element
+      let released = 0
+      art.hasPointerCapture = () => false
+      art.releasePointerCapture = () => (released += 1)
+
+      await touchPress(art)
+
+      expect(released).toBe(0)
+      // The press is still a press: the card goes on being carried.
+      await movePointer(wrapper, 40)
+      expect(ghost(wrapper).exists()).toBe(true)
+    })
   })
 })
 
@@ -810,6 +971,158 @@ describe('BoardField', () => {
   outside the grid was leaving the swallow armed, and it ate the next real
   click. These pin the behaviour down.
 */
+/*
+  A cell holds as many tokens as are put on it, but the artwork has room for
+  four. Past that the last slot becomes a chip, and the chip opens a popover
+  over the card listing every one of them — the ones on show and the ones not.
+*/
+describe('BoardField — a cell with more tokens than it can draw', () => {
+  it('gives the last slot to a chip, and draws one fewer token', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+
+    expect(drawnIn(cell)).toEqual([FIREWALL, QUICKSAND, FIREWALL])
+    expect(chipIn(cell).exists()).toBe(true)
+    expect(chipIn(cell).attributes('aria-label')).toBe('Show all 5 tokens')
+    // There is no ceiling to run into any more, so the plate never stands down.
+    expect(cell.find('[data-testid="board-field-add-token"]').exists()).toBe(true)
+  })
+
+  it('lists every token in the popover, on show or not', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    expect(crowdTokens(cells(wrapper)[0])).toEqual([
+      FIREWALL,
+      QUICKSAND,
+      FIREWALL,
+      QUICKSAND,
+      FIREWALL,
+    ])
+  })
+
+  it('opens under a mouse that arrives, and closes when it leaves again', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+
+    await hoverChip(cell)
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(true)
+
+    await leaveCrowd(cells(wrapper)[0])
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+  })
+
+  /* A finger has no arriving or leaving to give, so the chip is a switch. */
+  it('opens and closes on the chip itself', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+
+    await chipIn(cell).trigger('click')
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(true)
+
+    await chipIn(cells(wrapper)[0]).trigger('click')
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+  })
+
+  it('stays put under a finger, which never leaves anything', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    await crowdIn(cells(wrapper)[0]).trigger('pointerleave', { pointerType: 'touch' })
+
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(true)
+  })
+
+  it('closes on a click on its own ground, without opening the picker', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    await crowdIn(cells(wrapper)[0]).trigger('click')
+
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+    expect(picker(wrapper).exists()).toBe(false)
+  })
+
+  /*
+    A press anywhere else puts it away — a tap beside it, or the mouse being
+    held down to carry a card. The click that press becomes is eaten with it,
+    so dismissing the popover does not also open a picker over whatever it was
+    dismissed onto.
+  */
+  it('closes on a press elsewhere, and eats the click that press leaves', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    await cells(wrapper)[1].trigger('pointerdown')
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+
+    await cells(wrapper)[1].trigger('click')
+    expect(picker(wrapper).exists()).toBe(false)
+  })
+
+  it('closes on Escape', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+  })
+
+  it('takes a token off through the popover, leaving the rest in order', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    await crowdIn(cells(wrapper)[0])
+      .get('[data-testid="board-field-crowd-token-remove-1"]')
+      .trigger('click')
+
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({
+      '1-1': [FIREWALL, FIREWALL, QUICKSAND, FIREWALL],
+    })
+  })
+
+  /* Four left is four the cell can draw, so there is nothing left to open. */
+  it('puts itself away once the cell has nothing left to hide', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    await crowdIn(cells(wrapper)[0])
+      .get('[data-testid="board-field-crowd-token-remove-0"]')
+      .trigger('click')
+
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+    expect(chipIn(cells(wrapper)[0]).exists()).toBe(false)
+    expect(drawnIn(cells(wrapper)[0])).toEqual([QUICKSAND, FIREWALL, QUICKSAND, FIREWALL])
+  })
+
+  it('replaces a token from the popover, over the token that was clicked', async () => {
+    const wrapper = mountField()
+    const cell = await crowd(wrapper, 0)
+    await chipIn(cell).trigger('click')
+
+    await crowdIn(cells(wrapper)[0])
+      .get('[data-testid="board-field-crowd-token-4"]')
+      .trigger('click')
+
+    // The picker is a window over everything; the popover does not stand behind it.
+    expect(crowdIn(cells(wrapper)[0]).exists()).toBe(false)
+    await wrapper.get(`[data-testid="token-picker-token-${QUICKSAND}"]`).trigger('click')
+
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({
+      '1-1': [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND, QUICKSAND],
+    })
+  })
+})
+
 describe('BoardField — the click a drag leaves behind', () => {
   /** Carries a card out of the grid and lets it go there. */
   async function dragOffTheField(wrapper, from) {

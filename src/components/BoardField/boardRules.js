@@ -11,8 +11,17 @@
 export const ROWS = 5
 export const COLS = 4
 
-/** How many tokens one cell holds — two rows of two, and no more. */
-export const MAX_TOKENS = 4
+/**
+ * How many tokens a cell draws on the board — two rows of two, which is all the
+ * artwork has room for.
+ *
+ * It is not a limit on how many a cell may hold: a stack carrying its markers
+ * onto ground that is already marked ends up with more than four, and throwing
+ * the difference away would lose the user's work without saying so. Past this
+ * many the last slot goes to the chip that opens the rest — see
+ * `board-field__crowd`.
+ */
+export const VISIBLE_TOKENS = 4
 
 /** A cell's key in the board's own state: `<row>-<col>`, both 1-based. */
 export const cellKey = (cell) => `${cell.row}-${cell.col}`

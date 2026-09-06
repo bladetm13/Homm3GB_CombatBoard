@@ -1,4 +1,5 @@
 import { customImage, customLabel } from './customAssets'
+import { TOKEN_SCOPE } from './tokenConstants'
 import type { Token } from './tokenConstants'
 
 /**
@@ -26,6 +27,28 @@ export function tokenImage(token: Token | string): string {
 
 export function hasTokenImage(token: Token | string): boolean {
   return token in urls || customImage(token) !== undefined
+}
+
+const SCOPES: Set<string> = new Set(Object.values(TOKEN_SCOPE))
+
+/**
+ * Which set a token came from, read back out of the id itself: every id carries
+ * the folder it stands in — `unit_tokens/stack-hp.png` for one of ours,
+ * `custom/unit_tokens/3` for a picture the user brought in.
+ *
+ * On the board that is who a token belongs to. A unit token marks the stack and
+ * goes wherever the stack goes; a field token is laid on the ground and answers
+ * to the cell, not to whoever happens to be standing on it.
+ *
+ * An id that names no folder is treated as the ground's, which is the harmless
+ * way to be wrong: it stays where it was put instead of being carried off or
+ * thrown away with a card.
+ */
+export function tokenScopeOf(token: Token | string): TOKEN_SCOPE {
+  const folder = String(token)
+    .split('/')
+    .find((segment) => SCOPES.has(segment))
+  return (folder as TOKEN_SCOPE) ?? TOKEN_SCOPE.FIELD
 }
 
 /** Short names that would read as words if they were merely capitalised. */

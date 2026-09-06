@@ -114,13 +114,13 @@ onBeforeUnmount(clearTimers)
 /* Placed by `.combat-controls`, immediately left of the board tools. */
 .board-dice {
   display: flex;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--h3-widget-gap);
+  padding: var(--h3-widget-pad);
 }
 
 .board-dice__icon {
-  width: 22px;
-  height: 22px;
+  width: var(--h3-widget-icon);
+  height: var(--h3-widget-icon);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;

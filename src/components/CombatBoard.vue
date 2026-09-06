@@ -250,12 +250,18 @@ onBeforeUnmount(() => {
 */
 .combat-controls {
   position: absolute;
-  right: 18px;
-  bottom: 18px;
+  right: var(--h3-widget-inset);
+  bottom: var(--h3-widget-inset);
+  /*
+    The row is never allowed to wrap: three panels stacked would cover the board
+    they act on. On a narrow screen the furniture inside them shrinks instead —
+    see the breakpoints in `homm3.css`.
+  */
   z-index: 20;
   display: flex;
+  flex-wrap: nowrap;
   align-items: flex-end;
-  gap: 10px;
+  gap: calc(var(--h3-widget-gap) + 2px);
 }
 
 /* Only while a pan/zoom is actually in flight — see RASTER_SETTLE_MS. */

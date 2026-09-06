@@ -47,8 +47,8 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'reset'])
 .zoom-controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--h3-widget-gap);
+  padding: var(--h3-widget-pad);
 }
 
 .zoom-readout {
@@ -70,6 +70,6 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'reset'])
 
 .zoom-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--h3-widget-gap);
 }
 </style>

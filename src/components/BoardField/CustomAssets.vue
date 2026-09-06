@@ -256,6 +256,8 @@ function onPicked(event) {
   color: var(--h3-hint-ink);
   cursor: pointer;
   opacity: 0;
+  /* Inert while it is invisible, so it never takes the tap that picks. */
+  pointer-events: none;
   transition:
     opacity 0.12s ease,
     color 0.12s ease;
@@ -264,6 +266,16 @@ function onPicked(event) {
 .custom__cell:hover .custom__remove,
 .custom__remove:focus-visible {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* No hover to wait for, so the cross stands — see the same note in `Card`. */
+@media (hover: none) and (pointer: coarse) {
+  .custom__remove {
+    width: max(16%, 18px);
+    opacity: 0.9;
+    pointer-events: auto;
+  }
 }
 
 .custom__remove:hover {

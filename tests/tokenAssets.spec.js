@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { hasTokenImage, tokenImage, tokenLabel } from '../src/components/BoardField/tokenAssets'
+import {
+  hasTokenImage,
+  tokenImage,
+  tokenLabel,
+  tokenScopeOf,
+} from '../src/components/BoardField/tokenAssets'
 import { TOKENS, TOKEN_CATEGORY, TOKEN_SCOPE } from '../src/components/BoardField/tokenConstants'
 
 const everyToken = Object.values(TOKENS).flatMap((scope) =>
@@ -44,6 +49,25 @@ describe('tokenAssets', () => {
     expect(tokenLabel(TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL_LUNA_VI)).toBe(
       'Firewall Luna VI',
     )
+  })
+
+  it('reads a token back to the set it came from', () => {
+    for (const [scope, groups] of Object.entries(TOKENS)) {
+      for (const group of Object.values(groups)) {
+        for (const token of Object.values(group)) expect(tokenScopeOf(token), token).toBe(scope)
+      }
+    }
+  })
+
+  it('reads a scope out of a picture the user brought in', () => {
+    expect(tokenScopeOf(`custom/${TOKEN_SCOPE.UNIT}/3`)).toBe(TOKEN_SCOPE.UNIT)
+    expect(tokenScopeOf(`custom/${TOKEN_SCOPE.FIELD}/1`)).toBe(TOKEN_SCOPE.FIELD)
+  })
+
+  /* Whatever it is, it stays where it was put rather than riding off with a card. */
+  it('calls an id that names no folder the ground\'s', () => {
+    expect(tokenScopeOf('nonesuch/whatever.png')).toBe(TOKEN_SCOPE.FIELD)
+    expect(tokenScopeOf('')).toBe(TOKEN_SCOPE.FIELD)
   })
 
   it('gives every token a non-empty, in-group unique label', () => {

@@ -32,6 +32,20 @@
   --h3-font-body: 'IM Fell English', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
 
   --h3-radius: 2px;
+
+  /*
+    The furniture's one set of dimensions: the brass buttons, and the padding,
+    gaps and icons of the widgets built out of them. They live here rather than
+    in each widget so a narrow screen can shrink the whole row at once — see the
+    breakpoints at the foot of this file.
+  */
+  --h3-btn-size: 44px;
+  --h3-btn-font: 20px;
+  --h3-widget-pad: 8px;
+  --h3-widget-gap: 8px;
+  --h3-widget-icon: 22px;
+  /* How far the widget row stands off the corner of the viewport. */
+  --h3-widget-inset: 18px;
 }
 
 * {
@@ -117,7 +131,6 @@ canvas {
    Button — beveled brass plate, sinks in on press.
    -------------------------------------------------------------------------- */
 .h3-btn {
-  --h3-btn-size: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -126,7 +139,7 @@ canvas {
   height: var(--h3-btn-size);
   padding: 0 0.7em;
   font-family: var(--h3-font-display);
-  font-size: 20px;
+  font-size: var(--h3-btn-font);
   font-weight: 700;
   line-height: 1;
   color: var(--h3-gold-bright);
@@ -169,6 +182,37 @@ canvas {
   cursor: default;
   filter: grayscale(0.75) brightness(0.6);
   color: var(--h3-gold-dim);
+}
+
+/* --------------------------------------------------------------------------
+   Narrow screens — the widget row, cut down to fit.
+
+   The dice, the tools and the zoom stand in one row in the corner, and that row
+   is the widest fixed thing on the page: at full size it is some 410px, which a
+   phone held upright does not have to give. The row is not allowed to wrap —
+   three panels stacked would cover the board they act on — so instead the
+   furniture shrinks. Two steps: a tablet's worth of room, and a phone's.
+   -------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  :root {
+    --h3-btn-size: 36px;
+    --h3-btn-font: 17px;
+    --h3-widget-pad: 6px;
+    --h3-widget-gap: 6px;
+    --h3-widget-icon: 19px;
+    --h3-widget-inset: 12px;
+  }
+}
+
+@media (max-width: 440px) {
+  :root {
+    --h3-btn-size: 30px;
+    --h3-btn-font: 15px;
+    --h3-widget-pad: 4px;
+    --h3-widget-gap: 4px;
+    --h3-widget-icon: 16px;
+    --h3-widget-inset: 8px;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -233,6 +277,20 @@ canvas {
   .combat-controls,
   .picker__backdrop,
   .preview__backdrop {
+    display: none !important;
+  }
+
+  /*
+    On a touch screen the affordances are shown rather than hovered — see the
+    `(hover: none)` rules in `Card` and `BoardField`. Paper reports no hover
+    either, and some browsers hand a print stylesheet the screen's own media
+    values regardless, so the eye, the cross and the token plate are put away
+    here where the page is definitely not being tapped.
+  */
+  .card__preview,
+  .card__remove,
+  .board-field__overlay,
+  .board-field__token-remove {
     display: none !important;
   }
 

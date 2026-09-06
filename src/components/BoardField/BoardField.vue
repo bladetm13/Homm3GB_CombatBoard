@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import BoardToken from './BoardToken.vue'
 import Card from './Card.vue'
 import TokenPickerDialog from './TokenPickerDialog.vue'
 import UnitPickerDialog from './UnitPickerDialog.vue'
-import { COLS, MAX_TOKENS, ROWS, cellKey } from './boardRules'
+import { COLS, ROWS, VISIBLE_TOKENS, cellKey } from './boardRules'
 import { hasCustomAssets } from './customAssets'
-import { tokenImage, tokenLabel } from './tokenAssets'
+import { tokenScopeOf } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
 import { unitImage } from './unitAssets'
 import { useEscapeKey } from '../../composables/useEscapeKey'
@@ -44,6 +45,40 @@ useUnloadGuard(
 const unitAt = (cell) => units.value[cellKey(cell)]
 const tokensAt = (cell) => tokens.value[cellKey(cell)] ?? []
 
+/*
+  A cell's tokens, split by who they answer to. The markers were put on the
+  stack and go wherever it goes; the rest were laid on the ground and stay in
+  the cell, whoever walks over them — see `tokenScopeOf`.
+*/
+const stackTokensAt = (cell) =>
+  tokensAt(cell).filter((token) => tokenScopeOf(token) === TOKEN_SCOPE.UNIT)
+const fieldTokensAt = (cell) =>
+  tokensAt(cell).filter((token) => tokenScopeOf(token) !== TOKEN_SCOPE.UNIT)
+
+/**
+ * More tokens than the cell has room to draw. The rest are not lost — the last
+ * slot becomes the chip that opens every one of them.
+ */
+const crowded = (cell) => tokensAt(cell).length > VISIBLE_TOKENS
+
+/**
+ * The tokens the cell draws itself. They all fit until the cell is crowded;
+ * past that the last slot belongs to the chip, so one fewer is drawn than there
+ * are slots.
+ */
+const shownTokensAt = (cell) =>
+  crowded(cell) ? tokensAt(cell).slice(0, VISIBLE_TOKENS - 1) : tokensAt(cell)
+
+/**
+ * Lays `list` on a cell, or takes the cell out of the model when nothing is
+ * left on it. Hands back the new map rather than writing it, so a move can put
+ * both of its cells down in one go.
+ */
+function withTokens(source, cell, list) {
+  const key = cellKey(cell)
+  return list.length ? { ...source, [key]: list } : withoutKey(source, key)
+}
+
 const cells = computed(() =>
   Array.from({ length: ROWS * COLS }, (_, index) => ({
     index,
@@ -63,18 +98,25 @@ function openPicker(cell) {
  * emits `cell-click`.
  */
 function openTokenPicker(cell, index = null) {
+  closeCrowd()
   activeToken.value = { cell, index }
   emit('cell-click', cell)
 }
 
 /**
  * A token is offered by where it can go: a stack marker on a unit, a board
- * effect on bare ground. The cell under the picker decides which set opens —
- * and a token already down is replaced from the same set it came from.
+ * effect on bare ground. A token already down is replaced from the same set it
+ * came from, which is asked of the token itself — a cell can hold both at once,
+ * a stack standing on ground that was already marked, and there the cell has no
+ * one answer to give.
  */
-const tokenScope = computed(() =>
-  activeToken.value && unitAt(activeToken.value.cell) ? TOKEN_SCOPE.UNIT : TOKEN_SCOPE.FIELD,
-)
+const tokenScope = computed(() => {
+  const active = activeToken.value
+  if (!active) return TOKEN_SCOPE.FIELD
+  const replacing = active.index == null ? undefined : tokensAt(active.cell)[active.index]
+  if (replacing !== undefined) return tokenScopeOf(replacing)
+  return unitAt(active.cell) ? TOKEN_SCOPE.UNIT : TOKEN_SCOPE.FIELD
+})
 
 function place(unit) {
   const cell = activeCell.value
@@ -90,7 +132,6 @@ function placeToken(token) {
   const { cell, index } = active
   const list = tokensAt(cell)
   const at = index ?? list.length
-  if (at >= MAX_TOKENS) return
 
   const next = [...list]
   next[at] = token
@@ -101,20 +142,76 @@ function placeToken(token) {
 }
 
 function removeToken(cell, index) {
-  const key = cellKey(cell)
   const token = tokensAt(cell)[index]
   const next = tokensAt(cell).filter((_, i) => i !== index)
-  tokens.value = next.length ? { ...tokens.value, [key]: next } : withoutKey(tokens.value, key)
+  tokens.value = withTokens(tokens.value, cell, next)
   emit('remove-token', { ...cell, token, slot: index })
 }
+
+/*
+  The popover a crowded cell opens: every token on it, the four the cell draws
+  and the ones it could not.
+
+  It is opened by the chip standing in the cell's last slot, and it lies over
+  the card, the width of the cell. The mouse opens it by arriving and closes it
+  by leaving — the popover covers the chip it was opened from, so the pointer is
+  already inside it. A finger has no arriving or leaving to offer, so touch taps
+  the chip to open and taps away to close, which `onOutsidePress` hears.
+
+  `crowded` is asked again on the way out: take enough tokens off through the
+  popover's own crosses and there is nothing left it can show that the cell does
+  not, so it puts itself away.
+*/
+const crowdCell = ref(null)
+
+const crowdOpen = (cell) => crowdCell.value?.index === cell.index && crowded(cell)
+
+const closeCrowd = () => (crowdCell.value = null)
+
+/** A pointer that hovers opens it on arrival; a tap is touch's way in. */
+function onChipEnter(event, cell) {
+  if (event.pointerType === 'mouse') crowdCell.value = cell
+}
+
+function onChipClick(cell) {
+  crowdCell.value = crowdOpen(cell) ? null : cell
+}
+
+/** Leaving it is how a mouse puts it away; a finger never leaves anything. */
+function onCrowdLeave(event) {
+  if (event.pointerType === 'mouse') closeCrowd()
+}
+
+/*
+  A press anywhere but the popover puts it away — a click on the board, a tap
+  beside it, or the mouse being held down to carry a card. The click that press
+  is about to become is eaten, so dismissing the popover does not also open a
+  picker over whatever it was dismissed onto.
+*/
+function onOutsidePress(event) {
+  if (event.target?.closest?.('[data-testid="board-field-crowd"]')) return
+  closeCrowd()
+  swallowNextClick()
+}
+
+watch(crowdCell, (cell) => {
+  if (cell) window.addEventListener('pointerdown', onOutsidePress, true)
+  else window.removeEventListener('pointerdown', onOutsidePress, true)
+})
+
+onBeforeUnmount(() => window.removeEventListener('pointerdown', onOutsidePress, true))
 
 function removeAt(cell) {
   const key = cellKey(cell)
   const unit = units.value[key]
   units.value = withoutKey(units.value, key)
-  // The markers belonged to the stack that stood here, and the cell is bare
-  // ground now — which is not a place unit tokens may be.
-  if (tokensAt(cell).length) tokens.value = withoutKey(tokens.value, key)
+  /*
+    The markers belonged to the stack that stood here, and go with it: the cell
+    is bare ground now, which is not a place unit tokens may be. What was laid
+    on the ground was never the stack's to take away, and is left where it is.
+  */
+  const kept = fieldTokensAt(cell)
+  if (kept.length !== tokensAt(cell).length) tokens.value = withTokens(tokens.value, cell, kept)
   emit('remove', { ...cell, unit })
 }
 
@@ -137,7 +234,8 @@ let press = null
 const drag = ref(null)
 
 /**
- * When the last drag was let go.
+ * When the last gesture that leaves a stray click behind ended — a drag let go,
+ * or the popover of a crowded cell dismissed by a press somewhere else.
  *
  * A drag that begins and ends over one cell leaves a click behind, and the cell
  * would read it as a bare click and open the picker over the card just moved —
@@ -157,6 +255,11 @@ let droppedAt = 0
 
 /** How long after a release a click can still be the one it left behind. */
 const DROP_CLICK_MS = 250
+
+/** Arms that swallow for a gesture that is about to leave a click behind. */
+function swallowNextClick() {
+  droppedAt = Date.now()
+}
 
 /** A card may land on any cell that holds no unit — bare ground or tokens. */
 const canDrop = (cell) => !unitAt(cell)
@@ -184,10 +287,15 @@ function startPress(cell, event) {
   /*
     Touch hands the pointer to the element it went down on, which would hide
     every cell the finger then passes over. The card does not need it.
+
+    `event.target` first, because that is where the browser puts it: a press on
+    a card lands on the artwork inside it, not on the card this listener is
+    bound to. Asking only the card to let go of a capture it never held is a
+    silent no-op, and the finger then drags a ghost no cell can hear — the card
+    rides along and comes home again, every time.
   */
-  if (handle.hasPointerCapture?.(event.pointerId)) {
-    handle.releasePointerCapture(event.pointerId)
-  }
+  releaseCapture(event.target, event.pointerId)
+  releaseCapture(handle, event.pointerId)
 
   droppedAt = 0
   press = {
@@ -207,6 +315,11 @@ function startPress(cell, event) {
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
   window.addEventListener('pointercancel', endDrag)
+}
+
+/** Gives up a capture the browser set for us, wherever it put it. */
+function releaseCapture(el, pointerId) {
+  if (el?.hasPointerCapture?.(pointerId)) el.releasePointerCapture(pointerId)
 }
 
 function onPointerMove(event) {
@@ -251,7 +364,7 @@ function onPointerUp(event) {
   endDrag()
   if (!carried) return
 
-  droppedAt = Date.now()
+  swallowNextClick()
   const target = carried.over
   if (target && target.index !== carried.from.index && canDrop(target)) {
     moveUnit(carried.from, target)
@@ -269,6 +382,7 @@ function endDrag() {
 
 useEscapeKey(() => {
   if (drag.value) endDrag()
+  else closeCrowd()
 })
 
 // A drag listens on `window`, which outlives the board it was started on.
@@ -284,13 +398,16 @@ function moveUnit(from, to) {
   /*
     The markers belonged to the stack, so they travel with it — bare ground is
     not a place unit tokens may be, and leaving them behind would only throw
-    them away. Whatever the cell already held keeps its slots; the arriving
-    markers fill what room is left of the four.
+    them away. A board effect is the other way about: it was laid on the cell,
+    and a stack walking off it does not pick it up. Whatever the cell arrived at
+    already held keeps its place, and the arriving markers fall in behind it —
+    all of them. The cell draws four and offers the rest behind a chip, which is
+    a better answer than quietly dropping whichever ones would not fit.
   */
-  const carried = tokensAt(from)
+  const carried = stackTokensAt(from)
   if (carried.length) {
-    const next = [...tokensAt(to), ...carried].slice(0, MAX_TOKENS)
-    tokens.value = { ...withoutKey(tokens.value, fromKey), [toKey]: next }
+    const next = [...tokensAt(to), ...carried]
+    tokens.value = withTokens(withTokens(tokens.value, from, fieldTokensAt(from)), to, next)
   }
 
   emit('move', { from: { ...from }, to: { ...to }, unit })
@@ -323,7 +440,10 @@ function withoutKey(source, key) {
     <div
       v-for="cell in cells"
       :key="cell.index"
-      :class="`board-field__cell row-${cell.row} col-${cell.col}`"
+      :class="[
+        `board-field__cell row-${cell.row} col-${cell.col}`,
+        { 'is-crowd-open': crowdOpen(cell) },
+      ]"
       data-testid="board-field-cell"
       :data-row="cell.row"
       :data-col="cell.col"
@@ -348,7 +468,12 @@ function withoutKey(source, key) {
       <!--
         The tokens laid on this cell — on the card if there is one, on the bare
         ground if not. They wrap after two, so three read as a row of two and a
-        single below it.
+        single below it, and a fourth fills the square.
+
+        A cell may carry more than those four: a stack walks its markers onto
+        ground that is already marked, and none of them are thrown away. Past
+        four the last slot goes to the chip below, which opens every one of them
+        over the card.
       -->
       <div
         v-if="tokensAt(cell).length"
@@ -356,40 +481,56 @@ function withoutKey(source, key) {
         :class="unitAt(cell) ? 'board-field__tokens--on-unit' : 'board-field__tokens--on-field'"
         data-testid="board-field-tokens"
       >
-        <span
+        <BoardToken
+          v-for="(token, index) in shownTokensAt(cell)"
+          :key="index"
+          :token="token"
+          :index="index"
+          @replace="openTokenPicker(cell, index)"
+          @remove="removeToken(cell, index)"
+        />
+        <button
+          v-if="crowded(cell)"
+          class="board-field__chip"
+          type="button"
+          :aria-label="`Show all ${tokensAt(cell).length} tokens`"
+          :aria-expanded="crowdOpen(cell)"
+          data-testid="board-field-token-more"
+          @click.stop="onChipClick(cell)"
+          @pointerenter="onChipEnter($event, cell)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="board-field__chip-disc" cx="12" cy="12" r="11.2" />
+            <circle cx="6.6" cy="12" r="1.7" />
+            <circle cx="12" cy="12" r="1.7" />
+            <circle cx="17.4" cy="12" r="1.7" />
+          </svg>
+        </button>
+      </div>
+
+      <!--
+        Every token the cell carries, three to a row, laid over the card at the
+        cell's own width. They are the same tokens they are on the board — a
+        click replaces, the cross takes off — because they are the same
+        component. Clicking its own ground puts it away, as does leaving it.
+      -->
+      <div
+        v-if="crowdOpen(cell)"
+        class="board-field__crowd h3-panel"
+        data-testid="board-field-crowd"
+        data-no-drag
+        @click.stop="closeCrowd()"
+        @pointerleave="onCrowdLeave"
+      >
+        <BoardToken
           v-for="(token, index) in tokensAt(cell)"
           :key="index"
-          class="board-field__token"
-        >
-          <button
-            class="board-field__token-art"
-            type="button"
-            :aria-label="`Replace ${tokenLabel(token)}`"
-            :data-testid="`board-field-token-${index}`"
-            :data-token="token"
-            @click.stop="openTokenPicker(cell, index)"
-          >
-            <img
-              :src="tokenImage(token)"
-              :alt="tokenLabel(token)"
-              :title="tokenLabel(token)"
-              decoding="async"
-              draggable="false"
-            />
-          </button>
-          <button
-            class="board-field__token-remove"
-            type="button"
-            :aria-label="`Remove ${tokenLabel(token)}`"
-            :data-testid="`board-field-token-remove-${index}`"
-            @click.stop="removeToken(cell, index)"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle class="board-field__token-remove-disc" cx="12" cy="12" r="11.2" />
-              <path d="m8.4 8.4 7.2 7.2m0-7.2-7.2 7.2" />
-            </svg>
-          </button>
-        </span>
+          :token="token"
+          :index="index"
+          testid="board-field-crowd-token"
+          @replace="openTokenPicker(cell, index)"
+          @remove="removeToken(cell, index)"
+        />
       </div>
 
       <!--
@@ -419,7 +560,6 @@ function withoutKey(source, key) {
           </svg>
         </span>
         <button
-          v-if="tokensAt(cell).length < MAX_TOKENS"
           class="board-field__add-token"
           type="button"
           data-testid="board-field-add-token"
@@ -429,7 +569,7 @@ function withoutKey(source, key) {
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8v8M8 12h8" />
           </svg>
-          Add token
+          <span class="board-field__add-token-label">Add token</span>
         </button>
       </div>
       <slot v-bind="cell" :unit="unitAt(cell)" />
@@ -508,8 +648,10 @@ function withoutKey(source, key) {
   cursor: grabbing;
 }
 
-.board-field.is-dragging .board-field__overlay {
+.board-field.is-dragging .board-field__overlay,
+.board-field.is-dragging .board-field__add-token {
   opacity: 0;
+  pointer-events: none;
 }
 
 .board-field.is-dragging .board-field__cell:hover {
@@ -586,87 +728,86 @@ function withoutKey(source, key) {
   --h3-token-size: 39cqw;
 }
 
-.board-field__token {
-  position: relative;
+/*
+  The chip that stands in the last slot of a crowded cell: the same dark disc
+  the board draws its other hints on, with the three dots that say there is more
+  here than is being shown.
+*/
+.board-field__chip {
   display: block;
   width: var(--h3-token-size);
   height: var(--h3-token-size);
-  pointer-events: auto;
-}
-
-.board-field__token-art {
-  display: block;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  cursor: pointer;
-  background: none;
-  border: 0;
-  transition:
-    transform 0.12s ease,
-    filter 0.12s ease;
-}
-
-.board-field__token-art img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
-}
-
-.board-field__token:hover .board-field__token-art,
-.board-field__token-art:focus-visible {
-  outline: none;
-  transform: scale(1.08);
-  filter: brightness(1.15) drop-shadow(0 0 5cqw rgba(249, 219, 156, 0.75));
-}
-
-.board-field__token-remove {
-  position: absolute;
-  top: -8%;
-  right: -8%;
-  display: flex;
-  width: 40%;
   padding: 0;
   color: var(--h3-hint-ink);
   cursor: pointer;
   background: none;
   border: 0;
-  opacity: 0;
+  pointer-events: auto;
   transition:
-    opacity 0.12s ease,
-    color 0.12s ease;
+    transform 0.12s ease,
+    filter 0.12s ease;
 }
 
-.board-field__token:hover .board-field__token-remove,
-.board-field__token-remove:focus-visible {
-  opacity: 1;
+.board-field__chip:hover,
+.board-field__chip:focus-visible {
+  outline: none;
+  transform: scale(1.08);
+  filter: brightness(1.15);
 }
 
-.board-field__token-remove:hover {
-  color: #ffbea0;
-}
-
-.board-field__token-remove svg {
+.board-field__chip svg {
+  display: block;
   width: 100%;
-  height: auto;
-  aspect-ratio: 1;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  height: 100%;
+  fill: currentColor;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.7));
 }
 
-.board-field__token-remove-disc {
-  fill: var(--h3-hint-ground);
+.board-field__chip-disc {
+  fill: rgba(8, 5, 2, 0.88);
   stroke: var(--h3-hint-edge);
   stroke-width: 1;
 }
 
-.board-field__token-remove:hover .board-field__token-remove-disc {
-  stroke: currentColor;
+/*
+  The popover a crowded cell opens: the cell's own width, laid over the middle
+  of the card so the chip it was opened from is underneath it — which is what
+  lets a mouse close it simply by leaving. It is as tall as its rows need, three
+  tokens to a row, and the token size is what makes that three: two gaps and two
+  sides of padding are taken out of the cell's width before it is divided.
+*/
+.board-field__crowd {
+  /*
+    Three to a row, with room to spare: three tokens, two gaps and two sides of
+    padding come to 90 of the cell's 100, and the ten left over are what keeps
+    the third token up here. The panel's own border is why there has to be
+    slack at all — a cell is a hundred-odd pixels wide, so the two pixels it
+    takes are most of a percent, and an arrangement that adds up to exactly a
+    hundred wraps rather than fits.
+  */
+  --h3-token-size: 24cqw;
+  --h3-crowd-gap: 4cqw;
+
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--h3-crowd-gap);
+  justify-content: center;
+  padding: 5cqw;
+  transform: translateY(-50%);
+}
+
+/*
+  A cell is a containment context, which is its own stacking context with it, so
+  a popover reaching past the cell's edges would still be painted under the
+  cells that come after it. While one is open, its cell goes above them.
+*/
+.board-field__cell.is-crowd-open {
+  z-index: 2;
 }
 
 /*
@@ -781,6 +922,47 @@ function withoutKey(source, key) {
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
+}
+
+/*
+  A finger cannot hover, so on a touch screen the affordances stand rather than
+  wait: the token plate is the only way into the token picker, and hidden it is
+  either invisible-but-tappable or unreachable, both of which are worse than a
+  little furniture on the board.
+
+  What is shown is trimmed to earn its room on a small screen. The plate loses
+  its label and becomes the plus in a chip, and keeps a floor in pixels so it
+  stays worth aiming at when the whole board is scaled to fit a phone. The swap
+  arrows go entirely: they only said a card can be tapped, on twenty cells at
+  once, and a card that can be tapped is not news. The plus on bare ground
+  stays at full strength: with no hover and no cursor to change shape, that plus
+  is the whole of what tells a user an empty cell takes a card, and a hint drawn
+  faintly enough to be missed is not a hint.
+*/
+@media (hover: none) and (pointer: coarse) {
+  .board-field__overlay {
+    opacity: 1;
+  }
+
+  .board-field__hint[data-hint='swap'] {
+    display: none;
+  }
+
+  .board-field__add-token {
+    padding: 0.3em;
+    font-size: max(8cqw, 12px);
+    opacity: 0.75;
+    pointer-events: auto;
+  }
+
+  .board-field__add-token-label {
+    display: none;
+  }
+
+  .board-field__token-icon {
+    width: max(1.15em, 15px);
+    height: max(1.15em, 15px);
+  }
 }
 
 .board-field__cell.col-1 {

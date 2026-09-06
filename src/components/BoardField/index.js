@@ -1,4 +1,5 @@
 export { default as BoardField } from './BoardField.vue'
+export { default as BoardToken } from './BoardToken.vue'
 export { default as Card } from './Card.vue'
 export { default as CardFoil } from './CardFoil.vue'
 export { default as CardPreviewDialog } from './CardPreviewDialog.vue'

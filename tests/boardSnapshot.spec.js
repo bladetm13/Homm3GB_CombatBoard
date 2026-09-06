@@ -143,13 +143,14 @@ describe('readBoardSnapshot', () => {
     expect(read.dropped).toBe(4)
   })
 
-  it('holds a cell to the four tokens it has room for', () => {
+  /* The cell draws four and offers the rest; none of them are dropped here. */
+  it('keeps every token a cell carries, past the four it can draw', () => {
     const read = readBoardSnapshot({
       board: { tokens: { '1-1': [FIREWALL, QUICKSAND, FIREWALL, QUICKSAND, FIREWALL] } },
     })
 
-    expect(read.tokens['1-1']).toHaveLength(4)
-    expect(read.dropped).toBe(1)
+    expect(read.tokens['1-1']).toHaveLength(5)
+    expect(read.dropped).toBe(0)
   })
 
   it('drops a token list that is not a list', () => {

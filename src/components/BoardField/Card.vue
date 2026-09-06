@@ -139,6 +139,13 @@ const previewing = ref(false)
   border: 0;
   /* Hidden until the card is hovered, so the board stays clean. */
   opacity: 0;
+  /*
+    Out of the way while it is out of sight. Without this the corner is a button
+    the moment the card exists, whether or not anything is drawn there — which
+    on a screen that cannot hover means every tap near a corner is a preview or
+    a removal the user never asked for.
+  */
+  pointer-events: none;
   transition:
     opacity 0.12s ease,
     color 0.12s ease;
@@ -157,6 +164,35 @@ const previewing = ref(false)
 .card.is-removable:hover .card__remove,
 .card__remove:focus-visible {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/*
+  A finger cannot hover, so on a touch screen the two controls are simply there
+  — the only way to reach them, and the only way a tap on the artwork can be
+  told from a tap on them. They are drawn a little larger and given a floor in
+  pixels: a share of the card is nothing to aim at when the card is one cell of
+  a board scaled down to fit a phone.
+*/
+@media (hover: none) and (pointer: coarse) {
+  .card__preview,
+  .card__remove {
+    width: max(14%, 17px);
+    opacity: 0.9;
+    pointer-events: auto;
+  }
+
+  /*
+    The sheen has no hover to come out for either, and a foil printing that
+    never shows its foil is just a card. So it is simply on — but held still:
+    the sweep is the light moving as the pointer arrives, and there is no
+    arrival here. It is also the one thing on the page that would animate
+    twenty at a time down a scrolling picker, which is a poor way to spend a
+    phone. The full sweep is a tap away, in the preview.
+  */
+  .card.is-foil .card__foil {
+    opacity: var(--card-foil-touch, 0.24);
+  }
 }
 
 .card__preview:hover {

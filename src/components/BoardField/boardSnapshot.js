@@ -1,4 +1,4 @@
-import { MAX_TOKENS, isCellKey } from './boardRules'
+import { isCellKey } from './boardRules'
 import {
   CUSTOM_SCOPE,
   customAssets,
@@ -83,8 +83,8 @@ export function readBoardSnapshot(data) {
     }
     const kept = list.filter((token) => isPlaceableToken(token, known))
     dropped += list.length - kept.length
-    if (kept.length > MAX_TOKENS) dropped += kept.length - MAX_TOKENS
-    if (kept.length) tokens[key] = kept.slice(0, MAX_TOKENS)
+    // However many the cell carries: the board draws four and offers the rest.
+    if (kept.length) tokens[key] = kept
   }
 
   return { custom, units, tokens, dropped }

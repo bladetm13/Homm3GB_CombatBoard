@@ -176,20 +176,20 @@ async function onJsonPicked(event) {
 .board-tools {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--h3-widget-gap);
   width: max-content;
-  max-width: min(300px, calc(100vw - 160px));
-  padding: 8px;
+  max-width: min(300px, calc(100vw - 2 * var(--h3-widget-inset)));
+  padding: var(--h3-widget-pad);
 }
 
 .board-tools__buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--h3-widget-gap);
 }
 
 .board-tools__icon {
-  width: 22px;
-  height: 22px;
+  width: var(--h3-widget-icon);
+  height: var(--h3-widget-icon);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
