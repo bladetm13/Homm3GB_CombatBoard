@@ -72,5 +72,3 @@ is this repository's to license:
 Heroes of Might and Magic III and everything the cards depict belong to Ubisoft
 Entertainment. This is an unofficial, non-commercial fan tool made so people can get to
 know the game — not affiliated with, endorsed by, or sponsored by Ubisoft.
-
-If you fork this, bring artwork of your own or ask the authors first.

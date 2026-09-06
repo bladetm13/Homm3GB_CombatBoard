@@ -592,11 +592,27 @@ function withoutKey(source, key) {
           <svg v-if="!unitAt(cell)" class="board-field__plus" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <!-- Two arrows passing each other: the click swaps this card for another. -->
+          <!--
+            Two arrows chasing each other round a circle: the click swaps this
+            card for another. The turning reading is the one a browser's reload
+            button has taught everybody, which straight arrows passing each
+            other never quite gave.
+
+            Both halves are the same arc on a circle of radius 6, one turned
+            half a turn about the middle. Each sweeps 130 degrees, and the gaps
+            left over are what stops the pair closing into a plain ring — each
+            gap is where the arrow ahead of it points.
+
+            The heads are filled triangles rather than two strokes off the tip,
+            because on a curve one of those strokes lies back along the arc it
+            came from and the pair reads as a blob rather than an arrow.
+          -->
           <svg v-else class="board-field__swap" viewBox="0 0 24 24">
             <circle class="board-field__swap-disc" cx="12" cy="12" r="11.2" />
-            <path d="M5.5 9.5H17m-3-3 3 3-3 3" />
-            <path d="M18.5 14.5H7m3 3-3-3 3-3" />
+            <path d="M6.36 9.95A6 6 0 0 1 17.2 9" />
+            <path class="board-field__swap-head" d="M18.9 11.94 15.46 10 18.93 8Z" />
+            <path d="M17.64 14.05A6 6 0 0 1 6.8 15" />
+            <path class="board-field__swap-head" d="M5.1 12.06 8.54 14 5.07 16Z" />
           </svg>
         </span>
         <button
@@ -941,6 +957,12 @@ function withoutKey(source, key) {
   fill: var(--h3-hint-ground);
   stroke: var(--h3-hint-edge);
   stroke-width: 1;
+}
+
+/* The arrowheads are the one part of the mark that is filled, not drawn. */
+.board-field__swap-head {
+  fill: currentColor;
+  stroke: none;
 }
 
 /*
