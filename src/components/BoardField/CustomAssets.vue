@@ -44,13 +44,14 @@ const fileInput = ref(null)
 
 /*
   The input is the file dialog and nothing else — the plate is what the user
-  sees and clicks. Clearing `value` afterwards is what lets the same file be
-  picked twice, which is otherwise a silent no-op.
+  sees and clicks. A whole batch can be picked at once, and each picture is
+  filed in the order the dialog handed it over. Clearing `value` afterwards is
+  what lets the same file be picked twice, which is otherwise a silent no-op.
 */
 function onPicked(event) {
-  const file = event.target.files?.[0]
+  const picked = Array.from(event.target.files ?? [])
   event.target.value = ''
-  if (file) addCustomAsset(props.scope, file)
+  for (const file of picked) addCustomAsset(props.scope, file)
 }
 </script>
 
@@ -89,7 +90,7 @@ function onPicked(event) {
       <button
         class="custom__add"
         type="button"
-        aria-label="Add a custom image"
+        aria-label="Add custom images"
         :data-testid="`${testid}-custom-add`"
         @click="fileInput.click()"
       >
@@ -139,6 +140,7 @@ function onPicked(event) {
         class="custom__input"
         type="file"
         accept="image/*"
+        multiple
         aria-hidden="true"
         tabindex="-1"
         :data-testid="`${testid}-custom-input`"

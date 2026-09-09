@@ -13,9 +13,10 @@ const open = (scope = CUSTOM_SCOPE.UNITS, testid = 'picker') =>
   mount(CustomAssets, { props: { scope, testid } })
 
 /** What the browser's file dialog would hand back, had one really opened. */
-async function pick(wrapper, picked = file()) {
+async function pick(wrapper, ...picked) {
+  const files = picked.length ? picked : [file()]
   const input = wrapper.get('input[type="file"]')
-  Object.defineProperty(input.element, 'files', { value: [picked], configurable: true })
+  Object.defineProperty(input.element, 'files', { value: files, configurable: true })
   await input.trigger('change')
 }
 
@@ -32,7 +33,7 @@ describe('CustomAssets', () => {
     const wrapper = open()
     const plate = wrapper.get('[data-testid="picker-custom-add"]')
 
-    expect(plate.attributes('aria-label')).toBe('Add a custom image')
+    expect(plate.attributes('aria-label')).toBe('Add custom images')
     expect(plate.find('svg').exists()).toBe(true)
     expect(wrapper.findAll('[data-testid^="picker-unit-"]')).toHaveLength(0)
     expect(wrapper.get('[data-testid="accordion-header"]').text()).toContain('0')
@@ -78,6 +79,18 @@ describe('CustomAssets', () => {
     const entry = wrapper.get('[data-testid="picker-unit-custom/units/1"]')
     expect(entry.get('[data-testid="card"] img').attributes('alt')).toBe('Angry Peasant')
     expect(wrapper.get('[data-testid="accordion-header"]').text()).toContain('1')
+  })
+
+  it('files a whole batch at once, in the order the dialog handed it over', async () => {
+    const wrapper = open()
+    await pick(wrapper, file('Imp.png'), file('Gog.png'), file('Efreet.png'))
+
+    const alt = (id) =>
+      wrapper.get(`[data-testid="picker-unit-custom/units/${id}"] [data-testid="card"] img`)
+        .attributes('alt')
+
+    expect([alt(1), alt(2), alt(3)]).toEqual(['Imp', 'Gog', 'Efreet'])
+    expect(wrapper.get('[data-testid="accordion-header"]').text()).toContain('3')
   })
 
   it('emits a picked picture the way the built-in lists emit theirs', async () => {
