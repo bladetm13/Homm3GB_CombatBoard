@@ -338,6 +338,55 @@ describe('BoardField', () => {
     expect(wrapper.emitted('remove')[0][0]).toMatchObject({ row: 1, col: 3, unit: TITANS })
   })
 
+  it('turns a card on the field over to its other printing, in place', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 2, TITANS)
+    await placeUnit(wrapper, 5, ARCHANGELS)
+
+    await cells(wrapper)[2].get('[data-testid="card-flip"]').trigger('click')
+
+    const flipped = UNITS[UNIT_TYPE.TOWER].TITANS_PACK
+    expect(cardIn(cells(wrapper)[2]).attributes('data-unit')).toBe(flipped)
+    // The card is the same card, in the same cell; nothing else moved.
+    expect(cardIn(cells(wrapper)[5]).attributes('data-unit')).toBe(ARCHANGELS)
+    expect(wrapper.emitted('flip')[0][0]).toMatchObject({
+      row: 1,
+      col: 3,
+      from: TITANS,
+      unit: flipped,
+    })
+
+    // And back again, from the arrow the other printing carries.
+    await cells(wrapper)[2].get('[data-testid="card-flip"]').trigger('click')
+    expect(cardIn(cells(wrapper)[2]).attributes('data-unit')).toBe(TITANS)
+  })
+
+  it('keeps a cell\'s tokens when the card it stands on is turned over', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 2, TITANS)
+    await placeToken(wrapper, 2, DAMAGE_1)
+
+    await cells(wrapper)[2].get('[data-testid="card-flip"]').trigger('click')
+
+    // The stack is the same stack, drawn at its other size: its markers stand,
+    // which taking the card off and laying another down would not have left.
+    expect(drawnIn(cells(wrapper)[2])).toHaveLength(1)
+    expect(wrapper.emitted('remove')).toBeUndefined()
+  })
+
+  it('offers no flip on a card that has no other printing', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 2, UNITS[UNIT_TYPE.NEUTRAL_AZURE].AZURE_DRAGONS)
+    expect(cells(wrapper)[2].find('[data-testid="card-flip"]').exists()).toBe(false)
+  })
+
+  it('does not reopen the picker when the flip arrow is clicked', async () => {
+    const wrapper = mountField()
+    await placeUnit(wrapper, 2, TITANS)
+    await cells(wrapper)[2].get('[data-testid="card-flip"]').trigger('click')
+    expect(picker(wrapper).exists()).toBe(false)
+  })
+
   it('reads a card on the board without opening the picker over it', async () => {
     const wrapper = mountField()
     await placeUnit(wrapper, 2, TITANS)

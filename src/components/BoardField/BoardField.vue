@@ -21,6 +21,7 @@ import { useUnloadGuard } from '../../composables/useUnloadGuard'
 
 const emit = defineEmits([
   'cell-click',
+  'flip',
   'move',
   'place',
   'place-token',
@@ -217,6 +218,19 @@ watch(crowdCell, (cell) => {
 })
 
 onBeforeUnmount(() => window.removeEventListener('pointerdown', onOutsidePress, true))
+
+/**
+ * Turns the card over to its other printing, in place: the cell keeps its
+ * tokens, and the stack is the same stack, drawn at its other size.
+ *
+ * Which card that is — and whether the card has one at all — is the card's own
+ * business; the cell lays down what it is handed. See `flipUnit`.
+ */
+function flipAt(cell, unit) {
+  const from = unitAt(cell)
+  units.value = { ...units.value, [cellKey(cell)]: unit }
+  emit('flip', { ...cell, from, unit })
+}
 
 function removeAt(cell) {
   const key = cellKey(cell)
@@ -499,11 +513,13 @@ function withoutKey(source, key) {
         v-if="unitAt(cell)"
         :unit="unitAt(cell)"
         removable
+        flippable
         class="board-field__card"
         :class="{ 'is-carried': drag?.from.index === cell.index }"
         data-no-drag
         @pointerdown="startPress(cell, $event)"
         @remove="removeAt(cell)"
+        @flip="flipAt(cell, $event)"
       />
       <!--
         The tokens laid on this cell — on the card if there is one, on the bare

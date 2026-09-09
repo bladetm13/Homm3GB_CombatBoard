@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "author": "Ihor Kolesnychenko (the_13th) <bladetm13@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bladetm13/Homm3GB_CombatBoard.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

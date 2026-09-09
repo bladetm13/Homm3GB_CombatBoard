@@ -106,6 +106,17 @@ describe('CombatBoard', () => {
     expect(wrapper.find('[data-testid="zoom-out"]').exists()).toBe(true)
   })
 
+  it('stands the about button on top of the zoom widget', async () => {
+    const wrapper = await mountBoard()
+    const column = wrapper.get('.combat-zoom')
+    const buttons = column.findAll('[data-testid]').map((el) => el.attributes('data-testid'))
+
+    expect(buttons.indexOf('about-open')).toBe(0)
+    expect(buttons).toContain('zoom-readout')
+    // The row still holds one column beside the tools, so it cannot wrap.
+    expect(wrapper.get('.combat-controls').findAll('.combat-zoom')).toHaveLength(1)
+  })
+
   it('zooms in and out from the buttons', async () => {
     const wrapper = await mountBoard()
     await click(wrapper, 'zoom-in')

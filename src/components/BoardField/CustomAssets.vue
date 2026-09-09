@@ -67,6 +67,19 @@ function onPicked(event) {
       <span class="custom__info-mark" aria-hidden="true">i</span>
       <span>
         {{ hint }}
+        <!--
+          Only the cards come in two printings, so only the card picker is told
+          how the board reads one. The word is looked for in the file's own
+          name, which is all a browser will say about a picture the user picked.
+        -->
+        <template v-if="isUnits">
+          A name carrying the word <b class="custom__info-key">few</b> or
+          <b class="custom__info-key">pack</b> — as in
+          <b class="custom__info-key">gold_dragons_pack.png</b> — is read as that
+          printing: a pack card is drawn with the foil sheen, and a card with both
+          of its printings added here carries a flip arrow on the board that turns
+          it over to the other one.
+        </template>
         Pictures are kept in this tab only — nothing is uploaded, and a reload
         forgets them.
       </span>
@@ -136,13 +149,24 @@ function onPicked(event) {
 </template>
 
 <style scoped>
+/*
+  A note, not a footnote: it is the only place the rules for a picture are
+  written down, so it is set on its own darkened plate in the panel's own gold
+  rather than dimmed into the woodgrain behind it.
+*/
 .custom__info {
   display: flex;
-  gap: 8px;
-  margin: 0 0 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--h3-gold-dim);
+  gap: 9px;
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--h3-gold);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(181, 140, 74, 0.32);
+  border-left: 3px solid var(--h3-gold-dim);
+  border-radius: var(--h3-radius);
 }
 
 .custom__info-mark {
@@ -150,14 +174,22 @@ function onPicked(event) {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
+  width: 19px;
+  height: 19px;
+  margin-top: 2px;
   font-family: var(--h3-font-display);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--h3-hint-ink);
   border: 1px solid var(--h3-hint-edge);
   border-radius: 50%;
+}
+
+/* The words the board actually looks for, told apart from the prose about them. */
+.custom__info-key {
+  font-family: var(--h3-font-display);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--h3-gold-bright);
 }
 
 /*

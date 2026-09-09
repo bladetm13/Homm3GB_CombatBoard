@@ -10,7 +10,13 @@ import {
   isCustomAsset,
   removeCustomAsset,
 } from '../src/components/BoardField/customAssets'
-import { isFoilUnit, hasUnitImage, unitImage, unitLabel } from '../src/components/BoardField/unitAssets'
+import {
+  flipUnit,
+  isFoilUnit,
+  hasUnitImage,
+  unitImage,
+  unitLabel,
+} from '../src/components/BoardField/unitAssets'
 import { hasTokenImage, tokenImage, tokenLabel } from '../src/components/BoardField/tokenAssets'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
 import { TOKENS, TOKEN_CATEGORY, TOKEN_SCOPE } from '../src/components/BoardField/tokenConstants'
@@ -97,9 +103,65 @@ describe('customAssets', () => {
     expect(hasUnitImage(asset.id)).toBe(true)
     expect(unitImage(asset.id)).toBe(asset.url)
     expect(unitLabel(asset.id)).toBe('Boss')
-    // Nothing to key the foil off: a custom card is a plain printing.
+    // Nothing in the file's name to key the foil off: a plain printing.
     expect(isFoilUnit(asset.id)).toBe(false)
+    // And the id is a counter, not a name — nothing is read out of it.
     expect(isFoilUnit('custom/units/pack_pack.png')).toBe(false)
+    expect(flipUnit('custom/units/pack_pack.png')).toBeUndefined()
+  })
+
+  it('reads a printing off the file a picture was picked from', () => {
+    const few = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Gold Dragons_few.png'))
+    const pack = addCustomAsset(CUSTOM_SCOPE.UNITS, file('gold-dragons-pack.webp'))
+
+    // A card the user named `pack` is a foil printing like any other.
+    expect(isFoilUnit(few.id)).toBe(false)
+    expect(isFoilUnit(pack.id)).toBe(true)
+  })
+
+  it('pairs two pictures as one card, however their names are punctuated', () => {
+    const few = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Gold Dragons_few.png'))
+    const pack = addCustomAsset(CUSTOM_SCOPE.UNITS, file('gold-dragons-pack.webp'))
+
+    expect(flipUnit(few.id)).toBe(pack.id)
+    expect(flipUnit(pack.id)).toBe(few.id)
+  })
+
+  it('offers no flip until both printings of that very card are here', () => {
+    const lone = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Hydras_few.png'))
+    // One printing is not a pair, whatever else has been added beside it.
+    expect(flipUnit(lone.id)).toBeUndefined()
+
+    addCustomAsset(CUSTOM_SCOPE.UNITS, file('Wyverns_pack.png'))
+    expect(flipUnit(lone.id)).toBeUndefined()
+
+    // Nor is the same printing twice.
+    addCustomAsset(CUSTOM_SCOPE.UNITS, file('Hydras few.webp'))
+    expect(flipUnit(lone.id)).toBeUndefined()
+
+    const twin = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Hydras_pack.png'))
+    expect(flipUnit(lone.id)).toBe(twin.id)
+  })
+
+  it('keeps the two printings inside their own list', () => {
+    const card = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Imp_few.png'))
+    addCustomAsset(CUSTOM_SCOPE.FIELD_TOKENS, file('Imp_pack.png'))
+
+    // A token is not the other side of a card, whatever it was called.
+    expect(flipUnit(card.id)).toBeUndefined()
+  })
+
+  it('keeps a card flippable after its other printing is taken off the list', () => {
+    const few = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Nix_few.png'))
+    const pack = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Nix_pack.png'))
+
+    removeCustomAsset(pack.id)
+
+    // Off the picker, but still drawable — so a card already down can still be
+    // turned over to it, as one already turned over to it is still drawn.
+    expect(customAssets(CUSTOM_SCOPE.UNITS)).toHaveLength(1)
+    expect(flipUnit(few.id)).toBe(pack.id)
+    expect(unitImage(pack.id)).toBe(pack.url)
   })
 
   it('resolves as a token would, in either scope', () => {

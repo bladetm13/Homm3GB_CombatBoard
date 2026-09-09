@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import boardImage from '../../assets/battle_board.jpeg'
+import AboutControls from './AboutControls.vue'
 import ZoomControls from './ZoomControls.vue'
 import { useBoardTransform } from '../composables/useBoardTransform.js'
 
@@ -297,14 +298,18 @@ onBeforeUnmount(() => {
     <div class="combat-controls" data-no-drag>
       <!-- The board element goes with it: a control may want to draw it. -->
       <slot name="controls" :board="boardEl" />
-      <ZoomControls
-        :scale="scale"
-        :can-zoom-in="canZoomIn"
-        :can-zoom-out="canZoomOut"
-        @zoom-in="zoomIn()"
-        @zoom-out="zoomOut()"
-        @reset="reset()"
-      />
+      <!-- The (i) rides on top of the zoom widget: one column, one right edge. -->
+      <div class="combat-zoom">
+        <AboutControls />
+        <ZoomControls
+          :scale="scale"
+          :can-zoom-in="canZoomIn"
+          :can-zoom-out="canZoomOut"
+          @zoom-in="zoomIn()"
+          @zoom-out="zoomOut()"
+          @reset="reset()"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -374,6 +379,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-end;
+  gap: calc(var(--h3-widget-gap) + 2px);
+}
+
+.combat-zoom {
+  display: flex;
+  flex-direction: column;
   gap: calc(var(--h3-widget-gap) + 2px);
 }
 

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { UNITS, UNIT_TYPE } from '../src/components/BoardField/constants'
 import {
+  flipUnit,
   hasUnitImage,
   isFoilUnit,
   unitImage,
   unitLabel,
+  unitVariant,
 } from '../src/components/BoardField/unitAssets'
 
 const everyUnit = Object.values(UNITS).flatMap((group) => Object.values(group))
@@ -65,6 +67,60 @@ describe('unitAssets', () => {
     const foil = everyUnit.filter(isFoilUnit)
     expect(foil).toHaveLength(75)
     for (const unit of foil) expect(unit, unit).toContain('_pack')
+  })
+
+  it('reads a printing off the word in the file name, however it is fenced', () => {
+    expect(unitVariant(UNITS[UNIT_TYPE.TOWER].TITANS_FEW)).toBe('few')
+    expect(unitVariant(UNITS[UNIT_TYPE.TOWER].TITANS_PACK)).toBe('pack')
+    // Neutrals ship one card each and say neither.
+    expect(unitVariant(UNITS[UNIT_TYPE.NEUTRAL_AZURE].AZURE_DRAGONS)).toBe(null)
+    expect(unitVariant(UNITS[UNIT_TYPE.WALLS].GATE)).toBe(null)
+
+    // The word is a word wherever it is fenced off, which is what a card the
+    // user named themselves needs — see the same paths through `flipUnit`.
+    for (const name of ['a/hero_few.png', 'a/hero-few.png', 'a/hero.few.png', 'a/heroFew.png']) {
+      expect(unitVariant(name), name).toBe('few')
+    }
+    for (const name of ['a/hero_pack.png', 'a/PACK-hero.png', 'a/hero 2 pack.png']) {
+      expect(unitVariant(name), name).toBe('pack')
+    }
+
+    // And a word it merely sits inside is not the word.
+    for (const name of ['a/curfew.png', 'a/fewer_men.png', 'a/packrat.png', 'a/repack.png']) {
+      expect(unitVariant(name), name).toBe(null)
+    }
+
+    // Both said: the size is the suffix, so the last one is the card's.
+    expect(unitVariant('a/pack_mule_few.png')).toBe('few')
+  })
+
+  it('turns a card over to the other printing of the same unit', () => {
+    const { TITANS_FEW, TITANS_PACK } = UNITS[UNIT_TYPE.TOWER]
+    expect(flipUnit(TITANS_FEW)).toBe(TITANS_PACK)
+    expect(flipUnit(TITANS_PACK)).toBe(TITANS_FEW)
+
+    // A dash inside the unit's own name is not the one the size is fenced by.
+    const { MANTICORES_ALTERNATIVE_FEW, MANTICORES_ALTERNATIVE_PACK } = UNITS[UNIT_TYPE.DUNGEON]
+    expect(flipUnit(MANTICORES_ALTERNATIVE_FEW)).toBe(MANTICORES_ALTERNATIVE_PACK)
+    expect(flipUnit(MANTICORES_ALTERNATIVE_PACK)).toBe(MANTICORES_ALTERNATIVE_FEW)
+
+    // Every printing on the board has its opposite, and lands back on itself.
+    for (const unit of everyUnit.filter(unitVariant)) {
+      const other = flipUnit(unit)
+      expect(other, unit).toBeTruthy()
+      expect(hasUnitImage(other), other).toBe(true)
+      expect(unitVariant(other), other).not.toBe(unitVariant(unit))
+      expect(flipUnit(other), other).toBe(unit)
+    }
+  })
+
+  it('offers no flip where there is no other printing to flip to', () => {
+    // Single cards: nothing in the name to flip, and nothing to flip to.
+    for (const unit of everyUnit.filter((candidate) => !unitVariant(candidate))) {
+      expect(flipUnit(unit), unit).toBeUndefined()
+    }
+    // A name that says `few` over a file this deck does not have is still no.
+    expect(flipUnit('tower/units-tower-golden-nobody_few.webp')).toBeUndefined()
   })
 
   it('builds a readable label from the path', () => {

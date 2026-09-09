@@ -69,6 +69,6 @@ is this repository's to license:
   adapted here (redrawn or renumbered) and those adaptations carry the same licence. The
   rest are the author's own.
 
-Heroes of Might and Magic III and everything the cards depict belong to Ubisoft
+Heroes of Might and Magic III: The Board Game and everything the cards depict belong to Ubisoft
 Entertainment. This is an unofficial, non-commercial fan tool made so people can get to
 know the game — not affiliated with, endorsed by, or sponsored by Ubisoft.

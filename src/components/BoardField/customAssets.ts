@@ -58,6 +58,16 @@ export function customAssets(scope: CustomScope | string): CustomAsset[] {
   return assets.filter((asset) => asset.scope === scope && !asset.retired)
 }
 
+/**
+ * Everything ever filed under `scope`, retired pictures included — what a
+ * lookup by name wants, as against a list to offer. A picture taken off the
+ * picker is still drawable and still the other printing of whatever it was the
+ * other printing of; see `flipUnit`.
+ */
+export function scopedCustomAssets(scope: CustomScope | string): CustomAsset[] {
+  return assets.filter((asset) => asset.scope === scope)
+}
+
 /** Whether anything at all is on offer — the unload guard's half of it. */
 export function hasCustomAssets(): boolean {
   return assets.some((asset) => !asset.retired)

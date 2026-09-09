@@ -306,7 +306,6 @@ export enum UNITS_NEUTRAL_SILVER {
   PIT_LORDS = 'neutral_silver/units-neutral-silver-pit_lords.webp',
   BASILISKS = 'neutral_silver/units-neutral-silver-basilisks.webp',
   GORGONS = 'neutral_silver/units-neutral-silver-gorgons.webp',
-  STEEL_GOLEMS = 'neutral_silver/units-neutral-silver-steel_golems.webp',
   MAGIS = 'neutral_silver/units-neutral-silver-magis.webp',
   GENIES = 'neutral_silver/units-neutral-silver-genies.webp',
   AYSSIDS = 'neutral_silver/units-neutral-silver-ayssids.webp',
@@ -322,6 +321,7 @@ export enum UNITS_NEUTRAL_SILVER {
   NOMADS = 'neutral_silver/units-neutral-silver-nomads.webp',
   SHARPSHOOTERS = 'neutral_silver/units-neutral-silver-sharpshooters.webp',
   FANGARM = 'neutral_silver/units-neutral-silver-fangarm.webp',
+  STEEL_GOLEMS = 'neutral_silver/units-neutral-silver-steel_golems.webp',
 }
 
 export enum UNITS_RAMPART {
