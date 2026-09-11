@@ -12,6 +12,10 @@ import { reactive } from 'vue'
  * go. `unitImage`, `tokenImage` and both label helpers fall back to this
  * registry, so a custom picture drops onto the board like any other card or
  * token, preview and all.
+ *
+ * The list in the picker is the whole of what exists: a picture crossed off it
+ * is gone, and whatever was laid down from it goes with it — see
+ * `removeCustomAsset`.
  */
 
 /** Which of the three lists an image was added to — the asset folder it stands in for. */
@@ -34,8 +38,6 @@ export interface CustomAsset {
   url: string
   /** The file itself, kept so an export can carry the picture, not just its name. */
   blob: Blob
-  /** Taken off the list by its cross, but still drawn where it was laid down. */
-  retired?: boolean
 }
 
 /**
@@ -53,43 +55,81 @@ export function isCustomAsset(id: unknown): boolean {
   return typeof id === 'string' && id.startsWith(PREFIX)
 }
 
-/** Everything still offered under `scope`, oldest first. */
+/** Everything filed under `scope`, oldest first. */
 export function customAssets(scope: CustomScope | string): CustomAsset[] {
-  return assets.filter((asset) => asset.scope === scope && !asset.retired)
-}
-
-/**
- * Everything ever filed under `scope`, retired pictures included — what a
- * lookup by name wants, as against a list to offer. A picture taken off the
- * picker is still drawable and still the other printing of whatever it was the
- * other printing of; see `flipUnit`.
- */
-export function scopedCustomAssets(scope: CustomScope | string): CustomAsset[] {
   return assets.filter((asset) => asset.scope === scope)
 }
 
-/** Whether anything at all is on offer — the unload guard's half of it. */
+/** Whether anything at all is here — the unload guard's half of it. */
 export function hasCustomAssets(): boolean {
-  return assets.some((asset) => !asset.retired)
+  return assets.length > 0
 }
 
 /**
- * Takes a picture off the list its cross was clicked in.
+ * Moves a picture onto another one's place in the list, the way a card is
+ * carried from one cell to another: everything between the two shifts along to
+ * make room, and nothing else stirs.
  *
- * The entry itself is kept, and its object URL with it: a piece already laid
- * down on the board is drawn from that same URL, and revoking it would leave a
- * hole in the board rather than in the picker. The picture goes when the page
- * does, as everything here does.
+ * The order a picker shows is the user's own — it says nothing about the
+ * pictures, only about which ones they want nearest to hand — so it is theirs
+ * to set. Both pictures have to be in the same list for that to mean anything;
+ * a card is not a place among the tokens.
+ *
+ * All three lists share one array, so the move is made there: the pictures in
+ * between are the other list's as well as this one's, and keeping their order
+ * among themselves is what leaves the other pickers as they were.
+ */
+export function moveCustomAsset(id: string, onto: string): void {
+  if (id === onto) return
+  const from = assets.findIndex((asset) => asset.id === id)
+  const at = assets.findIndex((asset) => asset.id === onto)
+  if (from === -1 || at === -1 || assets[from].scope !== assets[at].scope) return
+
+  const [moved] = assets.splice(from, 1)
+  /*
+    `at` is read off the list the picture was still in. Taken out of it, a
+    target that sat after the picture has slid back one place — so inserting at
+    that same index puts the picture after the target going forwards, and
+    before it going back, which is what dropping onto a place means either way.
+  */
+  assets.splice(at, 0, moved)
+}
+
+/**
+ * Whoever has to hear that a picture is gone. The board is the one that does:
+ * it cannot draw what is no longer here, so it takes the piece off the cell.
+ */
+const watchers = new Set<(id: string) => void>()
+
+/** Subscribes to removals and hands back the way to stop listening. */
+export function onCustomAssetRemoved(listener: (id: string) => void): () => void {
+  watchers.add(listener)
+  return () => watchers.delete(listener)
+}
+
+/**
+ * Takes a picture off the list its cross was clicked in, for good: the entry
+ * goes, its object URL is released, and every listener is told so the pieces
+ * drawn from it can go too.
+ *
+ * The picker is where a picture is, and the only place it is — so a picture
+ * crossed off it is gone from the tab entirely rather than kept alive by
+ * whatever was laid down from it. That is what lets a file be replaced: cross
+ * the old one off, pick the new one under the same name, and nothing is left
+ * behind to be found by name later and drawn in its place.
+ *
+ * Listeners are told synchronously, before anything renders, so the board never
+ * gets a frame in which it is asked to draw a picture that is no longer here.
  */
 export function removeCustomAsset(id: string): void {
-  const asset = assets.find((candidate) => candidate.id === id)
-  if (asset) asset.retired = true
+  const at = assets.findIndex((candidate) => candidate.id === id)
+  if (at === -1) return
+  const [asset] = assets.splice(at, 1)
+  URL.revokeObjectURL?.(asset.url)
+  for (const listener of watchers) listener(id)
 }
 
-/**
- * The picture behind an id, or `undefined` if it is not a custom one. Retired
- * pictures still answer, so the board keeps what it was already showing.
- */
+/** The picture behind an id, or `undefined` if it is not a custom one, or gone. */
 export function customImage(id: unknown): string | undefined {
   if (!isCustomAsset(id)) return undefined
   return assets.find((asset) => asset.id === id)?.url
@@ -121,18 +161,15 @@ export function addCustomAsset(scope: CustomScope | string, file: File): CustomA
 
 /**
  * Puts a picture back under the id an exported board refers to it by, so the
- * cards and tokens laid on it come back with it. An id already here is simply
- * offered again — a picture is never registered twice.
+ * cards and tokens laid on it come back with it. An id already here is handed
+ * straight back — a picture is never registered twice.
  */
 export function restoreCustomAsset(
   entry: { id: string; scope: CustomScope | string; label?: string },
   file: File,
 ): CustomAsset | undefined {
   const existing = assets.find((asset) => asset.id === entry.id)
-  if (existing) {
-    existing.retired = false
-    return existing
-  }
+  if (existing) return existing
 
   const asset: CustomAsset = {
     id: entry.id,
@@ -148,7 +185,7 @@ export function restoreCustomAsset(
   return asset
 }
 
-/** The whole entry behind an id, offered or retired, for whoever needs its name. */
+/** The whole entry behind an id, for whoever needs its name. */
 export function customEntry(id: unknown): CustomAsset | undefined {
   if (!isCustomAsset(id)) return undefined
   return assets.find((asset) => asset.id === id)

@@ -1,8 +1,14 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Accordion from '../Accordion.vue'
 import Card from './Card.vue'
-import { CUSTOM_SCOPE, addCustomAsset, customAssets, removeCustomAsset } from './customAssets'
+import {
+  CUSTOM_SCOPE,
+  addCustomAsset,
+  customAssets,
+  moveCustomAsset,
+  removeCustomAsset,
+} from './customAssets'
 
 /**
  * The Custom section every picker opens with: an empty card-shaped plate that
@@ -14,7 +20,8 @@ import { CUSTOM_SCOPE, addCustomAsset, customAssets, removeCustomAsset } from '.
  * any built-in card or token; see `customAssets` for how far that goes.
  *
  * Each picture carries the same hover cross the board's own pieces do, which
- * takes it back off the list.
+ * takes it back off the list, and a grip beside it that carries it to another
+ * place in the same list — the order is the user's own; see `moveCustomAsset`.
  */
 const props = defineProps({
   scope: { type: String, required: true },
@@ -53,6 +60,167 @@ function onPicked(event) {
   event.target.value = ''
   for (const file of picked) addCustomAsset(props.scope, file)
 }
+
+/*
+  Carrying a picture to another place in the list.
+
+  It is the board's own gesture, and it is written the same way: a press is not
+  a carry until the pointer has travelled far enough to mean one, the picture
+  then rides under the pointer as a ghost, and the place it is let go over is
+  where it lands.
+
+  What differs is where it is taken hold of. The board hands a whole card to the
+  pointer because there is nothing else a press on a cell could mean; here a
+  press means "pick this one", and on a touch screen a drag across the list
+  means "scroll it". So the carry has a handle of its own, which is the only
+  thing on the plate that does not scroll under a finger.
+*/
+const DRAG_THRESHOLD_PX = 4
+
+/** How long after a release a click can still be the one it left behind. */
+const DROP_CLICK_MS = 250
+
+let press = null
+let droppedAt = 0
+const drag = ref(null)
+
+/** Whether this plate is the one being carried, or the one it is held over. */
+const carrying = (asset) => drag.value?.id === asset.id
+const dropState = (asset) =>
+  drag.value && drag.value.over === asset.id && !carrying(asset) ? 'ok' : null
+
+function startPress(asset, event) {
+  // Left button only for the mouse; touch and pen always carry.
+  if (event.pointerType === 'mouse' && event.button !== 0) return
+  // And one hand at a time: a second finger is the list being scrolled.
+  if (!event.isPrimary) return
+
+  const handle = event.currentTarget
+  const rect = handle.closest('[data-custom-id]').getBoundingClientRect()
+
+  /*
+    Touch hands the pointer to the element it went down on, which would hide
+    every plate the finger then passes over — the same capture the board gives
+    up, for the same reason, and asked of both places the browser may have put
+    it.
+  */
+  releaseCapture(event.target, event.pointerId)
+  releaseCapture(handle, event.pointerId)
+
+  droppedAt = 0
+  press = {
+    asset,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    // Where in the plate it was taken hold of, so the ghost hangs off the same
+    // spot, and how big that plate is in this picker's grid.
+    grabX: event.clientX - rect.left,
+    grabY: event.clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+  }
+
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', endDrag)
+}
+
+/** Gives up a capture the browser set for us, wherever it put it. */
+function releaseCapture(el, pointerId) {
+  if (el?.hasPointerCapture?.(pointerId)) el.releasePointerCapture(pointerId)
+}
+
+function onPointerMove(event) {
+  if (!press || event.pointerId !== press.pointerId) return
+
+  if (!drag.value) {
+    const travelled = Math.hypot(event.clientX - press.startX, event.clientY - press.startY)
+    if (travelled < DRAG_THRESHOLD_PX) return
+    drag.value = {
+      id: press.asset.id,
+      url: press.asset.url,
+      label: press.asset.label,
+      over: null,
+      width: press.width,
+      height: press.height,
+      x: 0,
+      y: 0,
+    }
+  } else if (event.pointerType === 'mouse' && event.buttons === 0) {
+    // Let go somewhere the page never heard about — off the window, most
+    // likely. The picture stays where it was rather than in the air.
+    endDrag()
+    return
+  }
+
+  drag.value.x = event.clientX - press.grabX
+  drag.value.y = event.clientY - press.grabY
+}
+
+/** The plate the pointer is over now — the plates are the carry's hit test. */
+function onOver(asset) {
+  if (!drag.value || drag.value.over === asset.id) return
+  drag.value.over = asset.id
+}
+
+function onGridLeave() {
+  if (drag.value) drag.value.over = null
+}
+
+function onPointerUp(event) {
+  if (!press || event.pointerId !== press.pointerId) return
+  const carried = drag.value
+  endDrag()
+  if (!carried) return
+
+  swallowNextClick()
+  if (carried.over) moveCustomAsset(carried.id, carried.over)
+}
+
+/** Puts the picture down where it stands — nothing moves, the listeners go. */
+function endDrag() {
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', endDrag)
+  press = null
+  drag.value = null
+}
+
+// A carry listens on `window`, which outlives the picker it was started in.
+onBeforeUnmount(endDrag)
+
+/** Arms the swallow for the click a finished carry is about to leave behind. */
+function swallowNextClick() {
+  droppedAt = Date.now()
+}
+
+/*
+  A carry that ends over the plate it started on leaves a click on that plate,
+  which would pick the picture and close the picker over it. That one click is
+  eaten — on `window` and before anything sees it, since the click lands on
+  whatever the press and the release have in common, which is rarely the plate
+  itself.
+*/
+function swallowDropClick(event) {
+  if (!droppedAt || Date.now() - droppedAt > DROP_CLICK_MS) return
+  droppedAt = 0
+  event.stopPropagation()
+  event.preventDefault()
+}
+
+onMounted(() => window.addEventListener('click', swallowDropClick, true))
+onBeforeUnmount(() => window.removeEventListener('click', swallowDropClick, true))
+
+/**
+ * The grip's other way to move a picture, for whoever is on a keyboard: one
+ * place along the list per press, in the order the list is read.
+ */
+function onGripKey(asset, step) {
+  const list = assets.value
+  const onto = list[list.indexOf(asset) + step]
+  if (onto) moveCustomAsset(asset.id, onto.id)
+}
 </script>
 
 <template>
@@ -82,11 +250,17 @@ function onPicked(event) {
           it over to the other one.
         </template>
         Pictures are kept in this tab only — nothing is uploaded, and a reload
-        forgets them.
+        forgets them. This list is where they live: removing one here also takes
+        it off the board, and the grip beside its cross carries it to another
+        place in the list.
       </span>
     </p>
 
-    <div class="custom__grid" :class="isUnits ? 'custom__grid--cards' : 'custom__grid--tokens'">
+    <div
+      class="custom__grid"
+      :class="isUnits ? 'custom__grid--cards' : 'custom__grid--tokens'"
+      @pointerleave="onGridLeave"
+    >
       <button
         class="custom__add"
         type="button"
@@ -104,8 +278,12 @@ function onPicked(event) {
         :key="asset.id"
         class="custom__cell"
         type="button"
+        :data-custom-id="asset.id"
         :data-testid="entryTestid(asset.id)"
+        :data-carried="carrying(asset) || null"
+        :data-drop="dropState(asset)"
         @click="emit('select', asset.id)"
+        @pointermove="onOver(asset)"
       >
         <Card v-if="isUnits" :unit="asset.id" lazy />
         <img
@@ -118,6 +296,37 @@ function onPicked(event) {
           decoding="async"
           draggable="false"
         />
+        <!--
+          The handle the picture is carried by. It is a grip rather than the
+          whole plate for the reason given above `startPress`, and it sits
+          across from the cross so neither is ever the other by a pixel.
+        -->
+        <span
+          class="custom__grip"
+          role="button"
+          tabindex="0"
+          :aria-label="`Move ${asset.label}`"
+          :data-testid="`${testid}-custom-move-${asset.id}`"
+          @click.stop
+          @pointerdown="startPress(asset, $event)"
+          @keydown.left.stop.prevent="onGripKey(asset, -1)"
+          @keydown.up.stop.prevent="onGripKey(asset, -1)"
+          @keydown.right.stop.prevent="onGripKey(asset, 1)"
+          @keydown.down.stop.prevent="onGripKey(asset, 1)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="custom__grip-disc" cx="12" cy="12" r="11.2" />
+            <g class="custom__grip-dots">
+              <circle cx="9.4" cy="7.6" r="1.35" />
+              <circle cx="14.6" cy="7.6" r="1.35" />
+              <circle cx="9.4" cy="12" r="1.35" />
+              <circle cx="14.6" cy="12" r="1.35" />
+              <circle cx="9.4" cy="16.4" r="1.35" />
+              <circle cx="14.6" cy="16.4" r="1.35" />
+            </g>
+          </svg>
+        </span>
+
         <span
           class="custom__remove"
           role="button"
@@ -134,6 +343,28 @@ function onPicked(event) {
           </svg>
         </span>
       </button>
+
+      <!--
+        The picture under the pointer. It rides on `body` so it is over the
+        picker's own panel rather than clipped by the list it came out of, and
+        it stays out of the pointer's way so the plates underneath go on
+        reporting themselves.
+      -->
+      <Teleport to="body">
+        <div
+          v-if="drag"
+          class="custom__ghost"
+          data-testid="picker-custom-ghost"
+          :style="{
+            width: `${drag.width}px`,
+            height: `${drag.height}px`,
+            transform: `translate3d(${drag.x}px, ${drag.y}px, 0)`,
+          }"
+          aria-hidden="true"
+        >
+          <img :src="drag.url" alt="" draggable="false" />
+        </div>
+      </Teleport>
 
       <input
         ref="fileInput"
@@ -277,13 +508,15 @@ function onPicked(event) {
 }
 
 /*
-  The cross the board draws on its own pieces, hung in the cell's corner: out of
-  the way until the picture is hovered, and never the click that picks it.
+  The two controls a picture carries, hung in its top corners: the cross the
+  board draws on its own pieces, and the grip the picture is carried by. Both
+  keep out of the way until the picture is hovered, and neither is ever the
+  click that picks it.
 */
+.custom__grip,
 .custom__remove {
   position: absolute;
   top: 4%;
-  right: 4%;
   display: flex;
   width: 16%;
   max-width: 26px;
@@ -297,14 +530,35 @@ function onPicked(event) {
     color 0.12s ease;
 }
 
-.custom__cell:hover .custom__remove,
+.custom__remove {
+  right: 4%;
+}
+
+/*
+  The grip is the one thing on the plate a finger may drag without the list
+  scrolling under it — which is the whole reason a picture is carried by a
+  handle rather than by itself.
+*/
+.custom__grip {
+  left: 4%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.custom__grip:active {
+  cursor: grabbing;
+}
+
+.custom__cell:hover :is(.custom__grip, .custom__remove),
+.custom__grip:focus-visible,
 .custom__remove:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
 
-/* No hover to wait for, so the cross stands — see the same note in `Card`. */
+/* No hover to wait for, so both stand — see the same note in `Card`. */
 @media (hover: none) and (pointer: coarse) {
+  .custom__grip,
   .custom__remove {
     width: max(16%, 18px);
     opacity: 0.9;
@@ -316,6 +570,11 @@ function onPicked(event) {
   color: #ffbea0;
 }
 
+.custom__grip:hover {
+  color: var(--h3-gold-bright);
+}
+
+.custom__grip svg,
 .custom__remove svg {
   width: 100%;
   height: auto;
@@ -327,14 +586,62 @@ function onPicked(event) {
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
 }
 
+.custom__grip-disc,
 .custom__remove-disc {
   fill: var(--h3-hint-ground);
   stroke: var(--h3-hint-edge);
   stroke-width: 1;
 }
 
+.custom__grip:hover .custom__grip-disc,
 .custom__remove:hover .custom__remove-disc {
   stroke: currentColor;
+}
+
+/* Dots, not strokes: six of them read as something to take hold of. */
+.custom__grip-dots {
+  fill: currentColor;
+  stroke: none;
+}
+
+/*
+  The plate a picture was lifted out of keeps its place in the grid while the
+  picture is in the air — the gap is where it goes back to if it is let go over
+  nothing.
+*/
+.custom__cell[data-carried] {
+  opacity: 0.35;
+}
+
+/* And the plate it is held over is the place it would take. */
+.custom__cell[data-drop='ok'] {
+  border-color: var(--h3-gold-bright);
+  box-shadow:
+    inset 0 0 0 1px var(--h3-gold-bright),
+    0 0 10px rgba(242, 217, 152, 0.35);
+}
+
+/*
+  The picture itself while it is carried. Over the picker it came out of, and
+  out of the pointer's way so the plates underneath go on reporting themselves.
+*/
+.custom__ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* Over the picker it was lifted out of, under the preview that opens on top. */
+  z-index: 120;
+  opacity: 0.92;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.custom__ghost img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.75));
 }
 
 .custom__art {

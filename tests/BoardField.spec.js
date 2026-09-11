@@ -7,6 +7,7 @@ import {
   CUSTOM_SCOPE,
   addCustomAsset,
   clearCustomAssets,
+  removeCustomAsset,
 } from '../src/components/BoardField/customAssets'
 import { clearPickerMemory } from '../src/components/BoardField/pickerMemory'
 import {
@@ -50,6 +51,9 @@ async function placeUnit(wrapper, cellIndex, unit) {
 }
 
 const cells = (wrapper) => wrapper.findAll('[data-testid="board-field-cell"]')
+
+/** A picture off the user's disk, as the file dialog would hand one over. */
+const art = (name) => new File(['art'], name, { type: 'image/png' })
 
 const tokenPicker = (wrapper) => wrapper.find('[data-testid="token-picker"]')
 
@@ -568,15 +572,12 @@ describe('BoardField', () => {
     wrapper.unmount()
     mountField()
     expect(leavingThePage().defaultPrevented).toBe(false)
-    addCustomAsset(CUSTOM_SCOPE.UNITS, new File(['art'], 'hero.png', { type: 'image/png' }))
+    addCustomAsset(CUSTOM_SCOPE.UNITS, art('hero.png'))
     expect(leavingThePage().defaultPrevented).toBe(true)
   })
 
   it('lays a custom picture down like any other card, art and all', async () => {
-    const custom = addCustomAsset(
-      CUSTOM_SCOPE.UNITS,
-      new File(['art'], 'Angry Peasant.png', { type: 'image/png' }),
-    )
+    const custom = addCustomAsset(CUSTOM_SCOPE.UNITS, art('Angry Peasant.png'))
     const wrapper = mountField()
 
     await cells(wrapper)[6].trigger('click')
@@ -586,6 +587,44 @@ describe('BoardField', () => {
     expect(card.attributes('data-unit')).toBe(custom.id)
     expect(card.get('img').attributes('alt')).toBe('Angry Peasant')
     expect(wrapper.emitted('update:units').at(-1)[0]).toEqual({ '2-3': custom.id })
+  })
+
+  it('takes a crossed-off card off the board, markers and all', async () => {
+    const custom = addCustomAsset(CUSTOM_SCOPE.UNITS, art('Angry Peasant.png'))
+    const wrapper = mountField()
+
+    // Ground marked first, so the cell carries a board effect as well as the
+    // marker the stack brings with it.
+    await placeToken(wrapper, 6, FIREWALL)
+    await cells(wrapper)[6].trigger('click')
+    await wrapper.get(`[data-testid="picker-unit-${custom.id}"]`).trigger('click')
+    await placeToken(wrapper, 6, DAMAGE_1)
+
+    removeCustomAsset(custom.id)
+    await nextTick()
+
+    // The card goes, and its markers with it; what was laid on the ground stays,
+    // exactly as the card's own cross would leave it.
+    expect(cardIn(cells(wrapper)[6]).exists()).toBe(false)
+    expect(tokensIn(cells(wrapper)[6])).toEqual([FIREWALL])
+    expect(wrapper.emitted('update:units').at(-1)[0]).toEqual({})
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '2-3': [FIREWALL] })
+  })
+
+  it('takes a crossed-off token off every cell it was laid on', async () => {
+    const custom = addCustomAsset(CUSTOM_SCOPE.FIELD_TOKENS, art('Lava.png'))
+    const wrapper = mountField()
+
+    await placeToken(wrapper, 6, custom.id)
+    await placeToken(wrapper, 7, custom.id)
+    await placeToken(wrapper, 7, FIREWALL)
+
+    removeCustomAsset(custom.id)
+    await nextTick()
+
+    expect(tokensIn(cells(wrapper)[6])).toEqual([])
+    expect(tokensIn(cells(wrapper)[7])).toEqual([FIREWALL])
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '2-4': [FIREWALL] })
   })
 
   it('lays the picked token on the cell it was picked for', async () => {

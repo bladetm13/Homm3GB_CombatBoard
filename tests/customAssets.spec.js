@@ -8,6 +8,8 @@ import {
   customLabel,
   hasCustomAssets,
   isCustomAsset,
+  moveCustomAsset,
+  onCustomAssetRemoved,
   removeCustomAsset,
 } from '../src/components/BoardField/customAssets'
 import {
@@ -88,13 +90,70 @@ describe('customAssets', () => {
     expect(() => removeCustomAsset(gone.id)).not.toThrow()
   })
 
-  it('keeps a removed picture drawable, so the board is not left with a hole', () => {
+  it('carries a picture to another place in its own list', () => {
+    const ids = () => customAssets(CUSTOM_SCOPE.UNITS).map((asset) => asset.label)
+    const [imp, gog, efreet] = ['Imp', 'Gog', 'Efreet'].map((name) =>
+      addCustomAsset(CUSTOM_SCOPE.UNITS, file(`${name}.png`)),
+    )
+    expect(ids()).toEqual(['Imp', 'Gog', 'Efreet'])
+
+    // Forwards, the picture lands after the place it was dropped on.
+    moveCustomAsset(imp.id, gog.id)
+    expect(ids()).toEqual(['Gog', 'Imp', 'Efreet'])
+
+    // Back, it lands before it — either way, on the place itself.
+    moveCustomAsset(efreet.id, gog.id)
+    expect(ids()).toEqual(['Efreet', 'Gog', 'Imp'])
+
+    // A picture dropped on itself, or on one that is not there, stays put.
+    moveCustomAsset(gog.id, gog.id)
+    moveCustomAsset(gog.id, 'custom/units/404')
+    moveCustomAsset('custom/units/404', gog.id)
+    expect(ids()).toEqual(['Efreet', 'Gog', 'Imp'])
+  })
+
+  it('leaves the other lists as they were, and never mixes one into another', () => {
+    const card = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Imp.png'))
+    const lava = addCustomAsset(CUSTOM_SCOPE.FIELD_TOKENS, file('Lava.png'))
+    const poison = addCustomAsset(CUSTOM_SCOPE.FIELD_TOKENS, file('Poison.png'))
+    const second = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Gog.png'))
+
+    // A card is not a place among the tokens, whichever way round it is asked.
+    moveCustomAsset(card.id, lava.id)
+    moveCustomAsset(lava.id, card.id)
+    expect(customAssets(CUSTOM_SCOPE.UNITS)).toEqual([card, second])
+    expect(customAssets(CUSTOM_SCOPE.FIELD_TOKENS)).toEqual([lava, poison])
+
+    // And reordering one list says nothing about the other.
+    moveCustomAsset(second.id, card.id)
+    expect(customAssets(CUSTOM_SCOPE.UNITS)).toEqual([second, card])
+    expect(customAssets(CUSTOM_SCOPE.FIELD_TOKENS)).toEqual([lava, poison])
+  })
+
+  it('forgets a removed picture outright — the picker is where a picture is', () => {
     const asset = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Placed.png'))
     removeCustomAsset(asset.id)
 
-    // It is off the picker, but a card already laid down still has its artwork.
-    expect(unitImage(asset.id)).toBe(asset.url)
-    expect(unitLabel(asset.id)).toBe('Placed')
+    // Nothing is left behind to be drawn, or found by name, in its place.
+    expect(hasUnitImage(asset.id)).toBe(false)
+    expect(customImage(asset.id)).toBeUndefined()
+    expect(customLabel(asset.id)).toBeUndefined()
+    expect(() => unitImage(asset.id)).toThrow()
+  })
+
+  it('tells whoever is listening which picture went', () => {
+    const heard = []
+    const stop = onCustomAssetRemoved((id) => heard.push(id))
+
+    const asset = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Gone.png'))
+    removeCustomAsset(asset.id)
+    // Removing what is not there says nothing.
+    removeCustomAsset(asset.id)
+    expect(heard).toEqual([asset.id])
+
+    stop()
+    removeCustomAsset(addCustomAsset(CUSTOM_SCOPE.UNITS, file('Next.png')).id)
+    expect(heard).toEqual([asset.id])
   })
 
   it('resolves as a card would, so the board can lay one down', () => {
@@ -151,17 +210,20 @@ describe('customAssets', () => {
     expect(flipUnit(card.id)).toBeUndefined()
   })
 
-  it('keeps a card flippable after its other printing is taken off the list', () => {
+  it('flips to the picture that is on the picker now, not the one replaced', () => {
     const few = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Nix_few.png'))
     const pack = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Nix_pack.png'))
+    expect(flipUnit(pack.id)).toBe(few.id)
 
-    removeCustomAsset(pack.id)
+    // The small printing is redrawn and picked again under the same file name:
+    // the card it is the other side of turns over to the new one.
+    removeCustomAsset(few.id)
+    expect(flipUnit(pack.id)).toBeUndefined()
 
-    // Off the picker, but still drawable — so a card already down can still be
-    // turned over to it, as one already turned over to it is still drawn.
-    expect(customAssets(CUSTOM_SCOPE.UNITS)).toHaveLength(1)
-    expect(flipUnit(few.id)).toBe(pack.id)
-    expect(unitImage(pack.id)).toBe(pack.url)
+    const redrawn = addCustomAsset(CUSTOM_SCOPE.UNITS, file('Nix_few.png'))
+    expect(customAssets(CUSTOM_SCOPE.UNITS)).toHaveLength(2)
+    expect(flipUnit(pack.id)).toBe(redrawn.id)
+    expect(unitImage(redrawn.id)).toBe(redrawn.url)
   })
 
   it('resolves as a token would, in either scope', () => {

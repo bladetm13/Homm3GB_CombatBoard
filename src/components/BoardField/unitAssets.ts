@@ -1,5 +1,5 @@
 import type { Unit } from './constants'
-import { customEntry, customImage, customLabel, isCustomAsset, scopedCustomAssets } from './customAssets'
+import { customAssets, customEntry, customImage, customLabel, isCustomAsset } from './customAssets'
 
 /**
  * Resolves a unit's enum value — its path relative to `assets/units/` — to the
@@ -149,9 +149,10 @@ export function isFoilUnit(unit: Unit | string): boolean {
  *
  * "Not here" is the whole of it for a picture the user brought in: nothing can
  * be derived from a file on their disk, so the other printing exists only if
- * they picked it too. It is looked for by name, under the same scope, and a
- * picture taken back off the picker still answers — a card already turned over
- * to it is drawn from that same picture, and would otherwise be left stranded.
+ * they picked it too. It is looked for by name, under the same scope, among the
+ * pictures still on the picker — which is all of them there are, so a file
+ * replaced by one of the same name turns over to the new picture, never to the
+ * one it was picked to replace.
  */
 export function flipUnit(unit: Unit | string): string | undefined {
   const entry = customEntry(unit)
@@ -170,7 +171,7 @@ export function flipUnit(unit: Unit | string): string | undefined {
   }
 
   const stem = stemOf(name, printing)
-  const other = scopedCustomAssets(entry.scope).find((candidate) => {
+  const other = customAssets(entry.scope).find((candidate) => {
     if (candidate.id === entry.id) return false
     const candidateName = baseName(candidate.file || candidate.label)
     const candidatePrinting = readPrinting(candidateName)

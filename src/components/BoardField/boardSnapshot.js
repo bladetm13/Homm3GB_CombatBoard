@@ -2,7 +2,6 @@ import { isCellKey } from './boardRules'
 import {
   CUSTOM_SCOPE,
   customAssets,
-  customEntry,
   customImage,
   isCustomAsset,
   restoreCustomAsset,
@@ -40,7 +39,7 @@ export async function boardSnapshot({ units = {}, tokens = {} } = {}) {
     app: SNAPSHOT_APP,
     version: SNAPSHOT_VERSION,
     savedAt: new Date().toISOString(),
-    custom: await customManifest({ units, tokens }),
+    custom: await customManifest(),
     board: {
       units: { ...units },
       tokens: Object.fromEntries(
@@ -145,24 +144,13 @@ function isWaiting(value) {
 }
 
 /**
- * Every picture worth carrying: the ones still on offer, plus any the user
- * crossed off the picker but left standing on the board.
+ * Every picture the user brought in, whether or not any of it is on the board.
+ * The pickers hold all there are — one crossed off is gone from the board with
+ * it, see `removeCustomAsset` — so the three lists are the whole manifest.
  */
-async function customManifest({ units, tokens }) {
-  const assets = new Map()
-
-  for (const scope of Object.values(CUSTOM_SCOPE)) {
-    for (const asset of customAssets(scope)) assets.set(asset.id, asset)
-  }
-
-  const placed = [...Object.values(units), ...Object.values(tokens).flat()]
-  for (const value of placed) {
-    if (assets.has(value)) continue
-    const asset = customEntry(value)
-    if (asset) assets.set(asset.id, asset)
-  }
-
-  return Promise.all([...assets.values()].map(noteOf))
+async function customManifest() {
+  const assets = Object.values(CUSTOM_SCOPE).flatMap((scope) => customAssets(scope))
+  return Promise.all(assets.map(noteOf))
 }
 
 async function noteOf({ id, scope, label, file, blob }) {

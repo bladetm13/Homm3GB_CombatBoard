@@ -80,13 +80,15 @@ describe('boardSnapshot', () => {
     ])
   })
 
-  it('still carries a picture crossed off the picker but left on the board', async () => {
+  it('carries nothing for a picture crossed off the picker', async () => {
+    const kept = addCustomAsset(CUSTOM_SCOPE.UNITS, image('Kept.png'))
     const card = addCustomAsset(CUSTOM_SCOPE.UNITS, image('Boss.png'))
     removeCustomAsset(card.id)
 
-    expect((await boardSnapshot({})).custom).toEqual([])
+    // The picker holds all there are, and the board holds none of what it does
+    // not — the cards laid down from it came off with it; see `purgeAsset`.
     expect((await boardSnapshot({ units: { '3-2': card.id } })).custom).toMatchObject([
-      { id: card.id, scope: CUSTOM_SCOPE.UNITS, label: 'Boss', file: 'Boss.png' },
+      { id: kept.id, scope: CUSTOM_SCOPE.UNITS, label: 'Kept', file: 'Kept.png' },
     ])
   })
 

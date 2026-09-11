@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import CustomAssets from '../src/components/BoardField/CustomAssets.vue'
 import {
   CUSTOM_SCOPE,
@@ -9,8 +10,12 @@ import {
 
 const file = (name = 'my-hero.png') => new File(['picture'], name, { type: 'image/png' })
 
+/*
+  On the page rather than beside it: a carry listens on `window`, and the click
+  it has to eat only reaches one from a tree the document actually holds.
+*/
 const open = (scope = CUSTOM_SCOPE.UNITS, testid = 'picker') =>
-  mount(CustomAssets, { props: { scope, testid } })
+  mount(CustomAssets, { attachTo: document.body, props: { scope, testid } })
 
 /** What the browser's file dialog would hand back, had one really opened. */
 async function pick(wrapper, ...picked) {
@@ -20,6 +25,59 @@ async function pick(wrapper, ...picked) {
   await input.trigger('change')
 }
 
+/** One pointer, spelled out the way a real one arrives; see `BoardField.spec`. */
+const POINTER = 1
+
+/** The pictures the section shows, in the order it shows them. */
+const platesIn = (wrapper) =>
+  wrapper.findAll('[data-custom-id]').map((plate) => plate.attributes('data-custom-id'))
+
+const gripIn = (wrapper, id, testid = 'picker') =>
+  wrapper.get(`[data-testid="${testid}-custom-move-${id}"]`)
+
+/** Takes hold of a picture by its grip. Nothing is in the air yet. */
+const grab = (grip, init = {}) =>
+  grip.trigger('pointerdown', {
+    pointerId: POINTER,
+    pointerType: 'mouse',
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+    clientX: 0,
+    clientY: 0,
+    ...init,
+  })
+
+/** A move of the pointer itself, which is what the page listens for. */
+async function movePointer(x, y = 0) {
+  window.dispatchEvent(
+    new PointerEvent('pointermove', {
+      pointerId: POINTER,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+    }),
+  )
+  await nextTick()
+}
+
+async function release() {
+  window.dispatchEvent(new PointerEvent('pointerup', { pointerId: POINTER }))
+  await nextTick()
+}
+
+/** Press, carry past the threshold, hold over another plate and let go. */
+async function carry(wrapper, from, onto, testid = 'picker') {
+  await grab(gripIn(wrapper, from, testid))
+  await movePointer(40)
+  if (onto) await wrapper.get(`[data-custom-id="${onto}"]`).trigger('pointermove')
+  await release()
+}
+
+const ghost = () => document.body.querySelector('[data-testid="picker-custom-ghost"]')
+
+enableAutoUnmount(afterEach)
 afterEach(clearCustomAssets)
 
 describe('CustomAssets', () => {
@@ -141,6 +199,95 @@ describe('CustomAssets', () => {
     expect(left[0].attributes('data-testid')).toBe(
       'token-picker-token-custom/unit_tokens/2',
     )
+  })
+
+  it('carries a picture to the plate it is let go over', async () => {
+    const wrapper = open()
+    await pick(wrapper, file('Imp.png'), file('Gog.png'), file('Efreet.png'))
+
+    await carry(wrapper, 'custom/units/1', 'custom/units/3')
+
+    expect(platesIn(wrapper)).toEqual([
+      'custom/units/2',
+      'custom/units/3',
+      'custom/units/1',
+    ])
+    // The grip carries; it never picks what it carried.
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('lifts a ghost past the threshold, and marks the plate it would take', async () => {
+    const wrapper = open()
+    await pick(wrapper, file('Imp.png'), file('Gog.png'))
+    const plate = (id) => wrapper.get(`[data-custom-id="${id}"]`)
+
+    await grab(gripIn(wrapper, 'custom/units/1'))
+    // A press that has not travelled is still a press, not a carry.
+    await movePointer(2)
+    expect(ghost()).toBe(null)
+
+    await movePointer(40)
+    expect(ghost()).not.toBe(null)
+    expect(plate('custom/units/1').attributes('data-carried')).toBe('true')
+
+    await plate('custom/units/2').trigger('pointermove')
+    expect(plate('custom/units/2').attributes('data-drop')).toBe('ok')
+    // The plate it came from is never a place to put it back into.
+    expect(plate('custom/units/1').attributes('data-drop')).toBeUndefined()
+
+    await release()
+    expect(ghost()).toBe(null)
+  })
+
+  it('puts the picture back when it is let go over nothing', async () => {
+    const wrapper = open()
+    await pick(wrapper, file('Imp.png'), file('Gog.png'))
+
+    await grab(gripIn(wrapper, 'custom/units/1'))
+    await movePointer(40)
+    await wrapper.get(`[data-custom-id="custom/units/2"]`).trigger('pointermove')
+    // Off the grid entirely: there is no place under the pointer to take.
+    await wrapper.get('.custom__grid').trigger('pointerleave')
+    await release()
+
+    expect(platesIn(wrapper)).toEqual(['custom/units/1', 'custom/units/2'])
+  })
+
+  it('eats the click a carry that ends where it began leaves behind', async () => {
+    const wrapper = open()
+    await pick(wrapper, file('Imp.png'), file('Gog.png'))
+
+    await carry(wrapper, 'custom/units/1', 'custom/units/1')
+    await wrapper.get('[data-custom-id="custom/units/1"]').trigger('click')
+
+    expect(platesIn(wrapper)).toEqual(['custom/units/1', 'custom/units/2'])
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('moves a picture one place along for whoever is on a keyboard', async () => {
+    const wrapper = open(CUSTOM_SCOPE.FIELD_TOKENS, 'token-picker')
+    await pick(wrapper, file('Lava.png'), file('Poison.png'))
+    const grip = gripIn(wrapper, 'custom/field_tokens/1', 'token-picker')
+    expect(grip.attributes('aria-label')).toBe('Move Lava')
+
+    await grip.trigger('keydown.right')
+    expect(platesIn(wrapper)).toEqual([
+      'custom/field_tokens/2',
+      'custom/field_tokens/1',
+    ])
+
+    await grip.trigger('keydown.left')
+    expect(platesIn(wrapper)).toEqual([
+      'custom/field_tokens/1',
+      'custom/field_tokens/2',
+    ])
+
+    // The ends of the list are the ends of it: nothing falls off either one.
+    await grip.trigger('keydown.left')
+    expect(platesIn(wrapper)).toEqual([
+      'custom/field_tokens/1',
+      'custom/field_tokens/2',
+    ])
   })
 
   it('shows only what was filed under its own scope', async () => {

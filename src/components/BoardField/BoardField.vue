@@ -11,7 +11,7 @@ import {
   VISIBLE_TOKENS_ON_STACK_TOUCH,
   cellKey,
 } from './boardRules'
-import { hasCustomAssets } from './customAssets'
+import { hasCustomAssets, onCustomAssetRemoved } from './customAssets'
 import { tokenScopeOf } from './tokenAssets'
 import { TOKEN_SCOPE } from './tokenConstants'
 import { unitImage } from './unitAssets'
@@ -245,6 +245,52 @@ function removeAt(cell) {
   if (kept.length !== tokensAt(cell).length) tokens.value = withTokens(tokens.value, cell, kept)
   emit('remove', { ...cell, unit })
 }
+
+/*
+  A picture crossed off its picker is gone from the tab, so nothing laid down
+  from it can go on being drawn: the card comes off its cell, taking the markers
+  that stood on it exactly as its own cross would, and a token comes off
+  wherever it was laid.
+
+  The picker is told to the board rather than read off it, and it is heard the
+  moment the picture goes, so there is no frame in between where a cell is asked
+  to draw something that is no longer here.
+*/
+function purgeAsset(id) {
+  let nextUnits = units.value
+  let nextTokens = tokens.value
+
+  const without = (source, key, list) =>
+    list.length ? { ...source, [key]: list } : withoutKey(source, key)
+
+  for (const [key, unit] of Object.entries(nextUnits)) {
+    if (unit !== id) continue
+    nextUnits = withoutKey(nextUnits, key)
+    // The markers belonged to the stack that stood here; see `removeAt`.
+    const list = nextTokens[key] ?? []
+    const kept = list.filter((token) => tokenScopeOf(token) !== TOKEN_SCOPE.UNIT)
+    if (kept.length !== list.length) nextTokens = without(nextTokens, key, kept)
+  }
+
+  for (const [key, list] of Object.entries(nextTokens)) {
+    const kept = list.filter((token) => token !== id)
+    if (kept.length !== list.length) nextTokens = without(nextTokens, key, kept)
+  }
+
+  if (nextUnits === units.value && nextTokens === tokens.value) return
+
+  units.value = nextUnits
+  tokens.value = nextTokens
+  /*
+    A token is replaced by where it sits in its cell, and the cell it sat in has
+    just been renumbered under the open picker. Rather than aim the pick at
+    whatever slid into that slot, the picker is put away.
+  */
+  if (activeToken.value?.index != null) activeToken.value = null
+  closeCrowd()
+}
+
+onBeforeUnmount(onCustomAssetRemoved(purgeAsset))
 
 /*
   Carrying a card from one cell to another.
