@@ -30,7 +30,6 @@ export enum TOKEN_CATEGORY {
   EFFECT = 'effect',
   STACK = 'stack',
   SPELLS = 'spells',
-  OTHER = 'other',
 }
 
 /** Group headings, for the token picker. */
@@ -39,7 +38,6 @@ export const TOKEN_CATEGORY_LABEL: Record<TOKEN_CATEGORY, string> = {
   [TOKEN_CATEGORY.EFFECT]: 'Effects',
   [TOKEN_CATEGORY.STACK]: 'Stack Stats',
   [TOKEN_CATEGORY.SPELLS]: 'Spells',
-  [TOKEN_CATEGORY.OTHER]: 'Other',
 }
 
 /** Spell markers that occupy a cell: each spread, then its numbered variants. */
@@ -59,6 +57,8 @@ export enum FIELD_TOKENS_SPELLS {
 }
 
 export enum UNIT_TOKENS_COMMON {
+  ACTIVATION = 'unit_tokens/common-activation.png',
+  RETALIATION = 'unit_tokens/common-retaliation.png',
   DAMAGE_1 = 'unit_tokens/common-damage-1.png',
   DAMAGE_2 = 'unit_tokens/common-damage-2.png',
   DAMAGE_3 = 'unit_tokens/common-damage-3.png',
@@ -71,6 +71,7 @@ export enum UNIT_TOKENS_EFFECT {
   ATTACK_1 = 'unit_tokens/effect-attack-1.png',
   ATTACK_2 = 'unit_tokens/effect-attack-2.png',
   CORROSION = 'unit_tokens/effect-corrosion.png',
+  TIME = 'unit_tokens/effect-time.png',
   WEAKNESS_1 = 'unit_tokens/effect-weakness-1.png',
   WEAKNESS_2 = 'unit_tokens/effect-weakness-2.png',
 }
@@ -88,10 +89,6 @@ export enum UNIT_TOKENS_SPELLS {
   CLONE_2 = 'unit_tokens/spells-clone-2.png',
 }
 
-export enum UNIT_TOKENS_OTHER {
-  TIME = 'unit_tokens/other-time.png',
-}
-
 /** Field-token enums by category. Drives the picker's order. */
 export const FIELD_TOKENS = {
   [TOKEN_CATEGORY.SPELLS]: FIELD_TOKENS_SPELLS,
@@ -103,7 +100,6 @@ export const UNIT_TOKENS = {
   [TOKEN_CATEGORY.EFFECT]: UNIT_TOKENS_EFFECT,
   [TOKEN_CATEGORY.STACK]: UNIT_TOKENS_STACK,
   [TOKEN_CATEGORY.SPELLS]: UNIT_TOKENS_SPELLS,
-  [TOKEN_CATEGORY.OTHER]: UNIT_TOKENS_OTHER,
 } as const
 
 /** Every token enum, keyed by the scope it may be dropped in. */

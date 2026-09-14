@@ -70,7 +70,6 @@ describe('token constants', () => {
       TOKEN_CATEGORY.EFFECT,
       TOKEN_CATEGORY.STACK,
       TOKEN_CATEGORY.SPELLS,
-      TOKEN_CATEGORY.OTHER,
     ])
   })
 })

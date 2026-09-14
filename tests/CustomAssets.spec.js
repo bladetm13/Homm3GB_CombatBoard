@@ -158,6 +158,18 @@ describe('CustomAssets', () => {
     expect(wrapper.emitted('select')).toEqual([['custom/units/1']])
   })
 
+  it('reads a picture instead of picking it when the card’s eye is clicked', async () => {
+    const wrapper = open()
+    await pick(wrapper, file('Angry Peasant.png'))
+    const cell = wrapper.get('[data-testid="picker-unit-custom/units/1"]')
+
+    await cell.get('[data-testid="card-preview-open"]').trigger('click')
+
+    expect(document.body.querySelector('[data-testid="card-preview"]')).not.toBe(null)
+    // The eye reads; it never picks what it read.
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
   it('names a token entry the token picker’s way, and draws it flat', async () => {
     const wrapper = open(CUSTOM_SCOPE.FIELD_TOKENS, 'token-picker')
     await pick(wrapper, file('Lava.png'))

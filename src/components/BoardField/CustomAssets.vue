@@ -20,8 +20,13 @@ import {
  * any built-in card or token; see `customAssets` for how far that goes.
  *
  * Each picture carries the same hover cross the board's own pieces do, which
- * takes it back off the list, and a grip beside it that carries it to another
- * place in the same list — the order is the user's own; see `moveCustomAsset`.
+ * takes it back off the list, and a grip that carries it to another place in
+ * the same list — the order is the user's own; see `moveCustomAsset`.
+ *
+ * A card also carries the eye every `Card` does, which is `Card`'s own and not
+ * this component's: at plate size the rules text is unreadable, and a picture
+ * the user brought in is no more readable than a printed one. That eye holds
+ * the top-left corner, so on the cards the grip comes down the other side.
  */
 const props = defineProps({
   scope: { type: String, required: true },
@@ -298,8 +303,9 @@ function onGripKey(asset, step) {
         />
         <!--
           The handle the picture is carried by. It is a grip rather than the
-          whole plate for the reason given above `startPress`, and it sits
-          across from the cross so neither is ever the other by a pixel.
+          whole plate for the reason given above `startPress`, and it is kept a
+          clear control's width from both the cross and a card's eye so it is
+          never either of them by a pixel.
         -->
         <span
           class="custom__grip"
@@ -504,22 +510,48 @@ function onGripKey(asset, step) {
 
 .custom__cell {
   position: relative;
+  /*
+    The controls are hung off the plate, so the plate has to be what they
+    measure — and measuring across its width rather than down its height is
+    what lets the grip hang exactly a control's height below the cross without
+    either of them knowing what that height is. The same arrangement `Card`
+    makes for its own corners, one level out.
+  */
+  container-type: inline-size;
+  --custom-control: min(16cqw, 26px);
+  --custom-inset: 4cqw;
+
   padding: 6px;
 }
 
 /*
-  The two controls a picture carries, hung in its top corners: the cross the
-  board draws on its own pieces, and the grip the picture is carried by. Both
-  keep out of the way until the picture is hovered, and neither is ever the
-  click that picks it.
+  A card fills its plate edge to edge, as it does in the picker's own cells —
+  and here it has to, because then the plate and the card are the same width,
+  the controls hung on the plate are measured in the very units the card
+  measures its eye in, and the two sit in one row rather than near each other.
+  The tokens keep their inset; they have no eye to line up with.
+*/
+.custom__grid--cards .custom__cell {
+  /* `Card`'s own `--card-control` and `--card-inset`, off the same width. */
+  --custom-control: 12cqw;
+  --custom-inset: 5cqw;
+
+  padding: 0;
+}
+
+/*
+  The two controls a picture carries: the cross the board draws on its own
+  pieces, and the grip the picture is carried by. The cross keeps the top-right
+  corner everywhere; where the grip goes depends on whether a card's eye has
+  already taken the other one. Both keep out of the way until the picture is
+  hovered, and neither is ever the click that picks it.
 */
 .custom__grip,
 .custom__remove {
   position: absolute;
-  top: 4%;
+  top: var(--custom-inset);
   display: flex;
-  width: 16%;
-  max-width: 26px;
+  width: var(--custom-control);
   color: var(--h3-hint-ink);
   cursor: pointer;
   opacity: 0;
@@ -531,7 +563,7 @@ function onGripKey(asset, step) {
 }
 
 .custom__remove {
-  right: 4%;
+  right: var(--custom-inset);
 }
 
 /*
@@ -540,9 +572,21 @@ function onGripKey(asset, step) {
   handle rather than by itself.
 */
 .custom__grip {
-  left: 4%;
+  left: var(--custom-inset);
   cursor: grab;
   touch-action: none;
+}
+
+/*
+  Except on a card. There the top-left corner is already spoken for by the
+  card's own eye — the one way to read what is printed on it — so the grip
+  comes down the right-hand side instead, under the cross and a hair below it:
+  two controls in a stack, exactly as `Card` hangs its flip.
+*/
+.custom__grid--cards .custom__grip {
+  top: calc(var(--custom-inset) + var(--custom-control) + 3cqw);
+  right: var(--custom-inset);
+  left: auto;
 }
 
 .custom__grip:active {
@@ -558,9 +602,16 @@ function onGripKey(asset, step) {
 
 /* No hover to wait for, so both stand — see the same note in `Card`. */
 @media (hover: none) and (pointer: coarse) {
+  .custom__cell {
+    --custom-control: clamp(18px, 16cqw, 26px);
+  }
+
+  .custom__grid--cards .custom__cell {
+    --custom-control: max(14cqw, 17px);
+  }
+
   .custom__grip,
   .custom__remove {
-    width: max(16%, 18px);
     opacity: 0.9;
     pointer-events: auto;
   }

@@ -13,7 +13,7 @@ const everyToken = Object.values(TOKENS).flatMap((scope) =>
 
 describe('tokenAssets', () => {
   it('resolves a url for every token in every enum', () => {
-    expect(everyToken).toHaveLength(31)
+    expect(everyToken).toHaveLength(33)
     for (const token of everyToken) {
       expect(hasTokenImage(token), token).toBe(true)
       expect(tokenImage(token), token).toBeTruthy()
