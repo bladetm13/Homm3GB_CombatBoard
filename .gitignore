@@ -13,3 +13,6 @@ coverage
 !.yarn/versions
 .pnp.*
 .yarn/install-state.gz
+
+# WSL drops these beside anything copied in from Windows
+*:Zone.Identifier
