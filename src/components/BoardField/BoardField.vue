@@ -695,6 +695,7 @@ function withoutKey(source, key) {
 
     <UnitPickerDialog
       v-if="activeCell"
+      :placed="units"
       @select="place"
       @close="activeCell = null"
     />

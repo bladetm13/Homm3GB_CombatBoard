@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import UnitPickerDialog from '../src/components/BoardField/UnitPickerDialog.vue'
-import { UNITS, UNIT_TYPE, UNIT_TYPE_LABEL } from '../src/components/BoardField/constants'
+import {
+  UNITS,
+  UNITS_BACKS,
+  UNITS_CASTLE,
+  UNITS_WALLS,
+  UNIT_TYPE,
+  UNIT_TYPE_LABEL,
+} from '../src/components/BoardField/constants'
 import {
   CUSTOM_SCOPE,
   addCustomAsset,
@@ -14,8 +21,9 @@ import { clearPickerMemory } from '../src/components/BoardField/pickerMemory'
  * VTU does not see teleported nodes in the wrapper's own tree — hence the stub.
  * The teleport itself is covered by its own test below.
  */
-const open = () =>
+const open = (props = {}) =>
   mount(UnitPickerDialog, {
+    props,
     attachTo: document.body,
     global: { stubs: { teleport: true } },
   })
@@ -222,5 +230,61 @@ describe('UnitPickerDialog', () => {
     const first_ = Object.values(UNITS[UNIT_TYPE.CASTLE])
     const second_ = Object.values(UNITS[Object.keys(UNITS)[1]])
     expect(second.findAll('[data-testid="card"]')).toHaveLength(first_.length + second_.length)
+  })
+
+  describe('captions and copies', () => {
+    const groupIndex = (type) => Object.keys(UNITS).indexOf(type)
+    const stock = (wrapper, unit) => wrapper.find(`[data-testid="picker-stock-${unit}"]`)
+
+    it('captions every card with its file name', () => {
+      const wrapper = open()
+      const cell = wrapper.get(`[data-testid="picker-unit-${UNITS_CASTLE.MARKSMEN_FEW}"]`)
+      const caption = cell.element.nextElementSibling
+      expect(caption.textContent.trim()).toBe('units-castle-bronze-marksmen_few.webp')
+    })
+
+    it('captions a custom card with the file it was picked from', () => {
+      const custom = addCustomAsset(CUSTOM_SCOPE.UNITS, image('Angry Peasant v2.png'))
+      const wrapper = open()
+      const cell = wrapper.get(`[data-testid="picker-unit-${custom.id}"]`)
+      expect(cell.element.nextElementSibling.textContent.trim()).toBe('Angry Peasant v2.png')
+    })
+
+    it('counts copies on the board against copies in the box, both sides together', async () => {
+      const wrapper = open({
+        placed: { '1-1': UNITS_WALLS.WALL, '1-2': UNITS_WALLS.WALL_BROKEN },
+      })
+      await openGroup(wrapper, groupIndex(UNIT_TYPE.WALLS))
+      const counter = stock(wrapper, UNITS_WALLS.WALL)
+      expect(counter.text()).toBe('2/3')
+      expect(counter.classes()).not.toContain('is-over')
+      expect(counter.attributes('title')).toContain('2 of the 3 copies')
+      expect(stock(wrapper, UNITS_WALLS.WALL_BROKEN).text()).toBe('2/3')
+    })
+
+    it('turns red past what the box holds, without refusing the pick', async () => {
+      const wrapper = open({
+        placed: { '1-1': UNITS_CASTLE.ZEALOTS_FEW, '1-2': UNITS_CASTLE.ZEALOTS_PACK },
+      })
+      const counter = stock(wrapper, UNITS_CASTLE.ZEALOTS_PACK)
+      expect(counter.text()).toBe('2/1')
+      expect(counter.classes()).toContain('is-over')
+      expect(counter.attributes('title')).toContain('more than the box holds')
+
+      await wrapper.get(`[data-testid="picker-unit-${UNITS_CASTLE.ZEALOTS_PACK}"]`).trigger('click')
+      expect(wrapper.emitted('select')).toEqual([[UNITS_CASTLE.ZEALOTS_PACK]])
+    })
+
+    it('shows no counter where the box sets no limit', async () => {
+      const custom = addCustomAsset(CUSTOM_SCOPE.UNITS, image('Angry Peasant.png'))
+      const wrapper = open()
+      await openGroup(wrapper, groupIndex(UNIT_TYPE.BACKS))
+      expect(wrapper.find(`[data-testid="picker-unit-${UNITS_BACKS.NEUTRAL_BRONZE}"]`).exists()).toBe(
+        true,
+      )
+      expect(stock(wrapper, UNITS_BACKS.NEUTRAL_BRONZE).exists()).toBe(false)
+      expect(stock(wrapper, custom.id).exists()).toBe(false)
+      expect(stock(wrapper, UNITS_BACKS.NEUTRAL_AZURE).text()).toBe('0/12')
+    })
   })
 })

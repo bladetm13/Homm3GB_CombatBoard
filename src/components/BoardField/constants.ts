@@ -427,4 +427,6 @@ export const UNITS = {
 } as const
 
 /** Any unit asset path, e.g. `castle/units-castle-bronze-marksmen_few.webp`. */
-export type Unit = (typeof UNITS)[keyof typeof UNITS][keyof (typeof UNITS)[keyof typeof UNITS]]
+export type Unit = {
+  [K in keyof typeof UNITS]: (typeof UNITS)[K][keyof (typeof UNITS)[K]]
+}[keyof typeof UNITS]

@@ -184,6 +184,17 @@ export function flipUnit(unit: Unit | string): string | undefined {
   return other?.id
 }
 
+/**
+ * The name of the file a card was drawn from, extension and all — what tells
+ * two versions of one card apart when their pictures do not. A custom card is
+ * the file it was picked from.
+ */
+export function unitFileName(unit: Unit | string): string {
+  const entry = customEntry(unit)
+  if (entry) return entry.file || entry.label
+  return unit.slice(unit.lastIndexOf('/') + 1)
+}
+
 const TIERS = new Set(['bronze', 'silver', 'golden', 'azure'])
 
 /**

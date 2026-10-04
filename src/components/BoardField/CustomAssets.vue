@@ -9,6 +9,7 @@ import {
   moveCustomAsset,
   removeCustomAsset,
 } from './customAssets'
+import { unitFileName } from './unitAssets'
 
 /**
  * The Custom section every picker opens with: an empty card-shaped plate that
@@ -278,77 +279,81 @@ function onGripKey(asset, step) {
         </svg>
       </button>
 
-      <button
-        v-for="asset in assets"
-        :key="asset.id"
-        class="custom__cell"
-        type="button"
-        :data-custom-id="asset.id"
-        :data-testid="entryTestid(asset.id)"
-        :data-carried="carrying(asset) || null"
-        :data-drop="dropState(asset)"
-        @click="emit('select', asset.id)"
-        @pointermove="onOver(asset)"
-      >
-        <Card v-if="isUnits" :unit="asset.id" lazy />
-        <img
-          v-else
-          class="custom__art"
-          :src="asset.url"
-          :alt="asset.label"
-          :title="asset.label"
-          loading="lazy"
-          decoding="async"
-          draggable="false"
-        />
-        <!--
-          The handle the picture is carried by. It is a grip rather than the
-          whole plate for the reason given above `startPress`, and it is kept a
-          clear control's width from both the cross and a card's eye so it is
-          never either of them by a pixel.
-        -->
-        <span
-          class="custom__grip"
-          role="button"
-          tabindex="0"
-          :aria-label="`Move ${asset.label}`"
-          :data-testid="`${testid}-custom-move-${asset.id}`"
-          @click.stop
-          @pointerdown="startPress(asset, $event)"
-          @keydown.left.stop.prevent="onGripKey(asset, -1)"
-          @keydown.up.stop.prevent="onGripKey(asset, -1)"
-          @keydown.right.stop.prevent="onGripKey(asset, 1)"
-          @keydown.down.stop.prevent="onGripKey(asset, 1)"
+      <div v-for="asset in assets" :key="asset.id" class="custom__item">
+        <button
+          class="custom__cell"
+          type="button"
+          :data-custom-id="asset.id"
+          :data-testid="entryTestid(asset.id)"
+          :data-carried="carrying(asset) || null"
+          :data-drop="dropState(asset)"
+          @click="emit('select', asset.id)"
+          @pointermove="onOver(asset)"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle class="custom__grip-disc" cx="12" cy="12" r="11.2" />
-            <g class="custom__grip-dots">
-              <circle cx="9.4" cy="7.6" r="1.35" />
-              <circle cx="14.6" cy="7.6" r="1.35" />
-              <circle cx="9.4" cy="12" r="1.35" />
-              <circle cx="14.6" cy="12" r="1.35" />
-              <circle cx="9.4" cy="16.4" r="1.35" />
-              <circle cx="14.6" cy="16.4" r="1.35" />
-            </g>
-          </svg>
-        </span>
+          <Card v-if="isUnits" :unit="asset.id" lazy />
+          <img
+            v-else
+            class="custom__art"
+            :src="asset.url"
+            :alt="asset.label"
+            :title="asset.label"
+            loading="lazy"
+            decoding="async"
+            draggable="false"
+          />
+          <!--
+            The handle the picture is carried by. It is a grip rather than the
+            whole plate for the reason given above `startPress`, and it is kept a
+            clear control's width from both the cross and a card's eye so it is
+            never either of them by a pixel.
+          -->
+          <span
+            class="custom__grip"
+            role="button"
+            tabindex="0"
+            :aria-label="`Move ${asset.label}`"
+            :data-testid="`${testid}-custom-move-${asset.id}`"
+            @click.stop
+            @pointerdown="startPress(asset, $event)"
+            @keydown.left.stop.prevent="onGripKey(asset, -1)"
+            @keydown.up.stop.prevent="onGripKey(asset, -1)"
+            @keydown.right.stop.prevent="onGripKey(asset, 1)"
+            @keydown.down.stop.prevent="onGripKey(asset, 1)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="custom__grip-disc" cx="12" cy="12" r="11.2" />
+              <g class="custom__grip-dots">
+                <circle cx="9.4" cy="7.6" r="1.35" />
+                <circle cx="14.6" cy="7.6" r="1.35" />
+                <circle cx="9.4" cy="12" r="1.35" />
+                <circle cx="14.6" cy="12" r="1.35" />
+                <circle cx="9.4" cy="16.4" r="1.35" />
+                <circle cx="14.6" cy="16.4" r="1.35" />
+              </g>
+            </svg>
+          </span>
 
-        <span
-          class="custom__remove"
-          role="button"
-          tabindex="0"
-          :aria-label="`Remove ${asset.label}`"
-          :data-testid="`${testid}-custom-remove-${asset.id}`"
-          @click.stop="removeCustomAsset(asset.id)"
-          @keydown.enter.stop.prevent="removeCustomAsset(asset.id)"
-          @keydown.space.stop.prevent="removeCustomAsset(asset.id)"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle class="custom__remove-disc" cx="12" cy="12" r="11.2" />
-            <path d="m8.4 8.4 7.2 7.2m0-7.2-7.2 7.2" />
-          </svg>
+          <span
+            class="custom__remove"
+            role="button"
+            tabindex="0"
+            :aria-label="`Remove ${asset.label}`"
+            :data-testid="`${testid}-custom-remove-${asset.id}`"
+            @click.stop="removeCustomAsset(asset.id)"
+            @keydown.enter.stop.prevent="removeCustomAsset(asset.id)"
+            @keydown.space.stop.prevent="removeCustomAsset(asset.id)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle class="custom__remove-disc" cx="12" cy="12" r="11.2" />
+              <path d="m8.4 8.4 7.2 7.2m0-7.2-7.2 7.2" />
+            </svg>
+          </span>
+        </button>
+        <!-- Several versions of one card look alike; their file names do not. -->
+        <span v-if="isUnits" class="custom__caption h3-title" :title="unitFileName(asset.id)">
+          {{ unitFileName(asset.id) }}
         </span>
-      </button>
+      </div>
 
       <!--
         The picture under the pointer. It rides on `body` so it is over the
@@ -448,6 +453,21 @@ function onGripKey(asset, step) {
 
 .custom__grid--tokens {
   grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+}
+
+.custom__item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* The file's own name — the same caption the built-in cards carry. */
+.custom__caption {
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .custom__add,
