@@ -10,6 +10,7 @@ import {
   VISIBLE_TOKENS,
   VISIBLE_TOKENS_ON_STACK_TOUCH,
   cellKey,
+  tokenOrder,
 } from './boardRules'
 import { hasCustomAssets, onCustomAssetRemoved } from './customAssets'
 import { tokenScopeOf } from './tokenAssets'
@@ -80,12 +81,22 @@ const slotsOn = (cell) =>
 const crowded = (cell) => tokensAt(cell).length > slotsOn(cell)
 
 /**
+ * Every token on the cell in the order it is drawn — the round markers first,
+ * see `tokenOrder` — each with the slot it holds in the cell's own list, which
+ * is what a replace or a removal is aimed at.
+ */
+const orderedTokensAt = (cell) => {
+  const list = tokensAt(cell)
+  return tokenOrder(list).map((index) => ({ token: list[index], index }))
+}
+
+/**
  * The tokens the cell draws itself. They all fit until the cell is crowded;
  * past that the last slot belongs to the chip, so one fewer is drawn than there
  * are slots.
  */
 const shownTokensAt = (cell) =>
-  crowded(cell) ? tokensAt(cell).slice(0, slotsOn(cell) - 1) : tokensAt(cell)
+  crowded(cell) ? orderedTokensAt(cell).slice(0, slotsOn(cell) - 1) : orderedTokensAt(cell)
 
 /**
  * Lays `list` on a cell, or takes the cell out of the model when nothing is
@@ -584,7 +595,7 @@ function withoutKey(source, key) {
         data-testid="board-field-tokens"
       >
         <BoardToken
-          v-for="(token, index) in shownTokensAt(cell)"
+          v-for="{ token, index } in shownTokensAt(cell)"
           :key="index"
           :token="token"
           :index="index"
@@ -625,7 +636,7 @@ function withoutKey(source, key) {
         @pointerleave="onCrowdLeave"
       >
         <BoardToken
-          v-for="(token, index) in tokensAt(cell)"
+          v-for="{ token, index } in orderedTokensAt(cell)"
           :key="index"
           :token="token"
           :index="index"

@@ -1,9 +1,10 @@
 <script setup>
 import { ref } from 'vue'
-import BoardDice from '../components/BoardDice.vue'
 import BoardField from '../components/BoardField/BoardField.vue'
 import BoardTools from '../components/BoardTools.vue'
 import CombatBoard from '../components/CombatBoard.vue'
+import RoundControls from '../components/RoundControls.vue'
+import { withoutRoundTokens } from '../components/BoardField/boardRules'
 
 /*
   The board's own state lives here rather than inside the field: the tools
@@ -17,6 +18,11 @@ function load(board) {
   units.value = board.units
   tokens.value = board.tokens
 }
+
+/** A new round: every card sheds the markers that only last one. */
+function newRound() {
+  tokens.value = withoutRoundTokens(tokens.value)
+}
 </script>
 
 <template>
@@ -27,7 +33,7 @@ function load(board) {
       </div>
 
       <template #controls="{ board }">
-        <BoardDice />
+        <RoundControls @new-round="newRound" />
         <BoardTools :board="board" :units="units" :tokens="tokens" @import="load" />
       </template>
     </CombatBoard>

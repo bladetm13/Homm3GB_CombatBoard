@@ -3,14 +3,20 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import Homm3Button from './Homm3Button.vue'
 
 /**
- * The board's die, in the widget left of the tools.
+ * What the table does between and during rounds, in the widget left of the
+ * tools: throw the die, and start a new round.
  *
- * Three faces — a penalty, nothing, a bonus — thrown for whatever the table
- * needs one for. The result is not board state: it is read off the die and
- * applied by hand, so nothing here is saved and nothing is emitted. It shows
+ * Starting a round is the board's business, not the widget's — it says so and
+ * the page takes the round's markers off the field. See `withoutRoundTokens`.
+ *
+ * The die has three faces — a penalty, nothing, a bonus — thrown for whatever
+ * the table needs one for. The result is not board state: it is read off the
+ * die and applied by hand, so nothing about it is saved or emitted. It shows
  * itself over the widget, holds long enough to be read out loud, and goes.
  */
 const FACES = [-1, 0, 1]
+
+const emit = defineEmits(['new-round'])
 
 /** How long it is in the air, and how long the face it lands on stays up. */
 const TUMBLE_MS = 700
@@ -76,35 +82,46 @@ onBeforeUnmount(clearTimers)
 </script>
 
 <template>
-  <div class="board-dice h3-panel" data-no-drag data-testid="board-dice">
+  <div class="round-controls h3-panel" data-no-drag data-testid="round-controls">
     <!--
       The die stands over the widget rather than in it: it is a throw, read once
       and gone, and the widget is a row of buttons that stays. The stage is here
       whether or not the die is, so a reader is told what came up.
     -->
-    <div class="board-dice__stage" role="status" aria-live="polite">
-      <Transition name="board-dice-pop">
-        <div v-if="face !== null" class="board-dice__popup" data-testid="board-dice-popup">
+    <div class="round-controls__stage" role="status" aria-live="polite">
+      <Transition name="round-controls-pop">
+        <div v-if="face !== null" class="round-controls__popup" data-testid="round-controls-popup">
           <span
-            class="board-dice__die"
+            class="round-controls__die"
             :class="[`is-${sign}`, rolling ? 'is-tumbling' : 'is-landed']"
             :data-face="rolling ? null : face"
-            data-testid="board-dice-face"
+            data-testid="round-controls-face"
             aria-hidden="true"
           >
             {{ label }}
           </span>
-          <span v-if="!rolling" class="board-dice__said">Rolled {{ label }}</span>
+          <span v-if="!rolling" class="round-controls__said">Rolled {{ label }}</span>
         </div>
       </Transition>
     </div>
 
-    <Homm3Button title="Roll the die" data-testid="board-dice-roll" @click="roll">
-      <svg class="board-dice__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <Homm3Button title="Roll the die" data-testid="round-controls-roll" @click="roll">
+      <svg class="round-controls__icon" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
         <circle cx="8.5" cy="8.5" r="1.35" />
         <circle cx="15.5" cy="15.5" r="1.35" />
         <circle cx="12" cy="12" r="1.35" />
+      </svg>
+    </Homm3Button>
+
+    <Homm3Button
+      title="New round"
+      data-testid="round-controls-new-round"
+      @click="emit('new-round')"
+    >
+      <svg class="round-controls__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" />
+        <path d="M19.5 3.5v4h-4" />
       </svg>
     </Homm3Button>
   </div>
@@ -112,13 +129,13 @@ onBeforeUnmount(clearTimers)
 
 <style scoped>
 /* Placed by `.combat-controls`, immediately left of the board tools. */
-.board-dice {
+.round-controls {
   display: flex;
   gap: var(--h3-widget-gap);
   padding: var(--h3-widget-pad);
 }
 
-.board-dice__icon {
+.round-controls__icon {
   width: var(--h3-widget-icon);
   height: var(--h3-widget-icon);
   fill: none;
@@ -132,13 +149,13 @@ onBeforeUnmount(clearTimers)
   A zero-sized anchor on top of the widget: the die hangs off it and is centred
   on the widget without ever taking up room in the row.
 */
-.board-dice__stage {
+.round-controls__stage {
   position: absolute;
   bottom: 100%;
   left: 50%;
 }
 
-.board-dice__popup {
+.round-controls__popup {
   position: absolute;
   bottom: 14px;
   left: 0;
@@ -149,7 +166,7 @@ onBeforeUnmount(clearTimers)
   The die itself: the same brass the buttons are cut from, squared off and lit
   from the same corner, with the throw's own colour behind the numeral.
 */
-.board-dice__die {
+.round-controls__die {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -177,30 +194,30 @@ onBeforeUnmount(clearTimers)
 }
 
 /* Neither way — plain stone, and no glow to claim otherwise. */
-.board-dice__die.is-even {
+.round-controls__die.is-even {
   --h3-face-ink: var(--h3-gold);
   --h3-face-ground: #6b5732;
   --h3-face-glow: rgba(0, 0, 0, 0);
 }
 
-.board-dice__die.is-up {
+.round-controls__die.is-up {
   --h3-face-ink: var(--h3-gold-bright);
   --h3-face-ground: #7f6220;
   --h3-face-glow: rgba(249, 219, 156, 0.45);
 }
 
-.board-dice__die.is-down {
+.round-controls__die.is-down {
   --h3-face-ink: #ffcdbc;
   --h3-face-ground: #6f2c1e;
   --h3-face-glow: rgba(168, 64, 44, 0.5);
 }
 
 /* In the air: over and over, and a touch of height with each turn. */
-.board-dice__die.is-tumbling {
-  animation: board-dice-tumble 0.3s linear infinite;
+.round-controls__die.is-tumbling {
+  animation: round-controls-tumble 0.3s linear infinite;
 }
 
-@keyframes board-dice-tumble {
+@keyframes round-controls-tumble {
   0% {
     transform: translateY(0) rotate(0deg) scale(1);
   }
@@ -215,11 +232,11 @@ onBeforeUnmount(clearTimers)
 }
 
 /* Down hard, over-shooting once before it settles flat. */
-.board-dice__die.is-landed {
-  animation: board-dice-land 0.42s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+.round-controls__die.is-landed {
+  animation: round-controls-land 0.42s cubic-bezier(0.2, 1.5, 0.4, 1) both;
 }
 
-@keyframes board-dice-land {
+@keyframes round-controls-land {
   0% {
     transform: scale(1.4) rotate(-14deg);
   }
@@ -237,24 +254,24 @@ onBeforeUnmount(clearTimers)
   The die rides in from the widget it was thrown out of, and drifts off the top
   on its way out.
 */
-.board-dice-pop-enter-active {
+.round-controls-pop-enter-active {
   transition:
     opacity 0.16s ease-out,
     transform 0.16s ease-out;
 }
 
-.board-dice-pop-leave-active {
+.round-controls-pop-leave-active {
   transition:
     opacity 0.3s ease-in,
     transform 0.3s ease-in;
 }
 
-.board-dice-pop-enter-from {
+.round-controls-pop-enter-from {
   opacity: 0;
   transform: translate(-50%, 16px) scale(0.55);
 }
 
-.board-dice-pop-leave-to {
+.round-controls-pop-leave-to {
   opacity: 0;
   transform: translate(-50%, -12px) scale(0.85);
 }
@@ -264,24 +281,24 @@ onBeforeUnmount(clearTimers)
   appears with the face it landed on.
 */
 @media (prefers-reduced-motion: reduce) {
-  .board-dice__die.is-tumbling,
-  .board-dice__die.is-landed {
+  .round-controls__die.is-tumbling,
+  .round-controls__die.is-landed {
     animation: none;
   }
 
-  .board-dice-pop-enter-active,
-  .board-dice-pop-leave-active {
+  .round-controls-pop-enter-active,
+  .round-controls-pop-leave-active {
     transition: opacity 0.16s ease;
   }
 
-  .board-dice-pop-enter-from,
-  .board-dice-pop-leave-to {
+  .round-controls-pop-enter-from,
+  .round-controls-pop-leave-to {
     transform: translateX(-50%);
   }
 }
 
 /* For a reader, who gets the result in words rather than on a brass plate. */
-.board-dice__said {
+.round-controls__said {
   position: absolute;
   width: 1px;
   height: 1px;

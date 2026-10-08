@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import CombatBoardView from '../src/views/CombatBoardView.vue'
-import BoardDice from '../src/components/BoardDice.vue'
+import RoundControls from '../src/components/RoundControls.vue'
 import BoardTools from '../src/components/BoardTools.vue'
 import CombatBoard from '../src/components/CombatBoard.vue'
 import BoardField from '../src/components/BoardField/BoardField.vue'
@@ -10,6 +10,7 @@ import { TOKENS, TOKEN_CATEGORY, TOKEN_SCOPE } from '../src/components/BoardFiel
 
 const TITANS = UNITS[UNIT_TYPE.TOWER].TITANS_FEW
 const FIREWALL = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL
+const COMMON = TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON]
 
 // A mounted field listens for the page being closed; `window` outlives it.
 enableAutoUnmount(afterEach)
@@ -41,7 +42,7 @@ describe('CombatBoardView', () => {
   it('stands the die widget left of the tools, in the same corner row', () => {
     const wrapper = mount(CombatBoardView, { attachTo: document.body })
     const row = wrapper.get('.combat-controls').element
-    const dice = wrapper.getComponent(BoardDice).element
+    const dice = wrapper.getComponent(RoundControls).element
     const tools = wrapper.getComponent(BoardTools).element
 
     expect(row.contains(dice)).toBe(true)
@@ -62,6 +63,26 @@ describe('CombatBoardView', () => {
     const cells = wrapper.findAll('[data-testid="board-field-cell"]')
     expect(cells[0].get('[data-testid="card"]').attributes('data-unit')).toBe(TITANS)
     expect(cells[1].get('[data-token]').attributes('data-token')).toBe(FIREWALL)
+  })
+
+  it('takes every round marker off the field when a new round starts', async () => {
+    const wrapper = mount(CombatBoardView, { attachTo: document.body })
+    wrapper.getComponent(BoardTools).vm.$emit('import', {
+      units: { '1-1': TITANS, '2-2': TITANS },
+      tokens: {
+        '1-1': [COMMON.ACTIVATION, COMMON.DAMAGE_1, COMMON.RETALIATION],
+        '2-2': [COMMON.RETALIATION],
+        '1-2': [FIREWALL],
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    await wrapper.get('[data-testid="round-controls-new-round"]').trigger('click')
+
+    expect(wrapper.getComponent(BoardTools).props('tokens')).toEqual({
+      '1-1': [COMMON.DAMAGE_1],
+      '1-2': [FIREWALL],
+    })
   })
 
   it('hands the board it holds to the tools, for them to write out', async () => {

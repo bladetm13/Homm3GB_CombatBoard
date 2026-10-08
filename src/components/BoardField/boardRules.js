@@ -1,12 +1,14 @@
 /**
- * The shape of the board, and the one rule about it that more than one file
- * needs to know.
+ * The shape of the board, and the rules about it that more than one file needs
+ * to know.
  *
  * The grid is the one printed on the artwork — four columns across, five rows
  * down — and a cell is named by its place in it. An imported file is the reason
  * these live apart from the component: a key off the board has to be spotted
  * before anything is laid down.
  */
+
+import { UNIT_TOKENS_COMMON } from './tokenConstants'
 
 export const ROWS = 5
 export const COLS = 4
@@ -47,4 +49,42 @@ export function isCellKey(key) {
   const row = Number(match[1])
   const col = Number(match[2])
   return row >= 1 && row <= ROWS && col >= 1 && col <= COLS
+}
+
+/**
+ * The markers a stack wears for one round only: it has acted, it has struck
+ * back. A new round takes them off every card — see `withoutRoundTokens` — and
+ * they are what a card shows first, in this order — see `tokenOrder`.
+ */
+export const ROUND_TOKENS = [UNIT_TOKENS_COMMON.ACTIVATION, UNIT_TOKENS_COMMON.RETALIATION]
+
+/**
+ * The board's tokens with every round marker taken off, and a cell left with
+ * nothing on it taken out altogether. Hands back the same map when there was
+ * nothing to take, so a new round on a quiet board changes nothing.
+ */
+export function withoutRoundTokens(tokens) {
+  let next = tokens
+  for (const [key, list] of Object.entries(tokens)) {
+    const kept = list.filter((token) => !ROUND_TOKENS.includes(token))
+    if (kept.length === list.length) continue
+    next = { ...next }
+    if (kept.length) next[key] = kept
+    else delete next[key]
+  }
+  return next
+}
+
+/**
+ * The order a cell draws its tokens in, as indices into the list it holds: the
+ * round markers first, then everything else as it was laid down. The list
+ * itself is never reordered, so a token keeps the slot it is replaced and
+ * removed by.
+ */
+export function tokenOrder(list) {
+  const rank = (token) => {
+    const at = ROUND_TOKENS.indexOf(token)
+    return at === -1 ? ROUND_TOKENS.length : at
+  }
+  return list.map((_, index) => index).sort((a, b) => rank(list[a]) - rank(list[b]) || a - b)
 }

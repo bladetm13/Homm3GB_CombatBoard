@@ -64,6 +64,8 @@ const openTokens = (wrapper, cellIndex) =>
 const FIREWALL = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].FIREWALL
 const QUICKSAND = TOKENS[TOKEN_SCOPE.FIELD][TOKEN_CATEGORY.SPELLS].QUICKSAND
 const DAMAGE_1 = TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON].DAMAGE_1
+const ACTIVATION = TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON].ACTIVATION
+const RETALIATION = TOKENS[TOKEN_SCOPE.UNIT][TOKEN_CATEGORY.COMMON].RETALIATION
 
 /** Opens the picker over a cell and picks a token out of it. */
 async function placeToken(wrapper, cellIndex, token) {
@@ -769,6 +771,31 @@ describe('BoardField', () => {
     expect(wrapper.get('[data-testid="token-picker"]').attributes('aria-label')).toBe(
       'Choose a unit token',
     )
+  })
+
+  it('draws the round markers first — activation, then retaliation — the rest as laid', async () => {
+    const wrapper = mountField({
+      props: {
+        units: { '1-1': TITANS },
+        tokens: { '1-1': [DAMAGE_1, RETALIATION, FIREWALL, ACTIVATION] },
+      },
+    })
+
+    expect(tokensIn(cells(wrapper)[0])).toEqual([ACTIVATION, RETALIATION, DAMAGE_1, FIREWALL])
+  })
+
+  it('aims a click on a sorted token at that token, not at whatever was laid there', async () => {
+    const wrapper = mountField({
+      props: { units: { '1-1': TITANS }, tokens: { '1-1': [DAMAGE_1, ACTIVATION] } },
+    })
+
+    // Drawn first, but held second: its hooks and its slot are the second's.
+    const drawn = cells(wrapper)[0].findAll('[data-token]')
+    expect(drawn[0].attributes('data-testid')).toBe('board-field-token-1')
+    await cells(wrapper)[0].get('[data-testid="board-field-token-remove-1"]').trigger('click')
+
+    expect(wrapper.emitted('update:tokens').at(-1)[0]).toEqual({ '1-1': [DAMAGE_1] })
+    expect(wrapper.emitted('remove-token').at(-1)[0]).toMatchObject({ slot: 1, token: ACTIVATION })
   })
 
   it('lets the parent own the tokens through v-model:tokens', async () => {

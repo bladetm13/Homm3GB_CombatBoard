@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import BoardDice from '../src/components/BoardDice.vue'
+import RoundControls from '../src/components/RoundControls.vue'
 
-const open = () => mount(BoardDice)
+const open = () => mount(RoundControls)
 
-const button = (wrapper) => wrapper.get('[data-testid="board-dice-roll"]')
-const popup = (wrapper) => wrapper.find('[data-testid="board-dice-popup"]')
-const die = (wrapper) => wrapper.find('[data-testid="board-dice-face"]')
+const button = (wrapper) => wrapper.get('[data-testid="round-controls-roll"]')
+const newRound = (wrapper) => wrapper.get('[data-testid="round-controls-new-round"]')
+const popup = (wrapper) => wrapper.find('[data-testid="round-controls-popup"]')
+const die = (wrapper) => wrapper.find('[data-testid="round-controls-face"]')
 
 /** The die is in the air for 700ms; this carries it to the table. */
 async function land(wrapper) {
@@ -36,11 +37,12 @@ afterEach(() => {
 /* The die keeps timers running, and a timer outlives the test that set it. */
 enableAutoUnmount(afterEach)
 
-describe('BoardDice', () => {
-  it('offers one button, and nothing on the table until it is pressed', () => {
+describe('RoundControls', () => {
+  it('offers the die and a new round, and nothing on the table until one is pressed', () => {
     const wrapper = open()
-    expect(wrapper.findAll('button')).toHaveLength(1)
+    expect(wrapper.findAll('button')).toHaveLength(2)
     expect(button(wrapper).attributes('title')).toBe('Roll the die')
+    expect(newRound(wrapper).attributes('title')).toBe('New round')
     expect(popup(wrapper).exists()).toBe(false)
   })
 
@@ -193,9 +195,17 @@ describe('BoardDice', () => {
     expect(shown(wrapper)).toBe('+1')
   })
 
+  it('asks for a new round, and leaves the die out of it', async () => {
+    const wrapper = open()
+    await newRound(wrapper).trigger('click')
+
+    expect(wrapper.emitted('new-round')).toHaveLength(1)
+    expect(popup(wrapper).exists()).toBe(false)
+  })
+
   it('leaves the board still when the widget is used', () => {
     // `CombatBoard` skips its own pan for anything under `[data-no-drag]`.
-    expect(open().get('[data-testid="board-dice"]').attributes('data-no-drag')).toBeDefined()
+    expect(open().get('[data-testid="round-controls"]').attributes('data-no-drag')).toBeDefined()
   })
 
   it('drops its timers when it goes', async () => {
